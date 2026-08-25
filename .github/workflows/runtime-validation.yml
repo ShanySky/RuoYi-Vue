@@ -58,6 +58,9 @@ jobs:
       - name: Build backend
         run: mvn -B -DskipTests clean package
 
+      - name: Prepare runtime directories
+        run: sudo mkdir -p /home/ruoyi/logs && sudo chown -R "$USER":"$USER" /home/ruoyi
+
       - name: Start RuoYi backend
         run: |
           nohup java -jar ruoyi-admin/target/ruoyi-admin.jar > /tmp/ruoyi.log 2>&1 &
