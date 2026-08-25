@@ -65,16 +65,30 @@ jobs:
 
       - name: Wait for HTTP startup
         run: |
+          set +e
           for i in $(seq 1 60); do
             if curl -fsS http://127.0.0.1:8080/captchaImage > /tmp/captcha.json; then
               echo "RuoYi backend is responding"
               cat /tmp/captcha.json
               exit 0
             fi
+            if ! kill -0 "$(cat /tmp/ruoyi.pid)" 2>/dev/null; then
+              echo "RuoYi backend process exited before becoming ready"
+              break
+            fi
             sleep 2
           done
-          echo "RuoYi backend did not become ready"
-          cat /tmp/ruoyi.log
+          {
+            echo '===== PROCESS ====='
+            ps -ef | grep '[r]uoyi-admin' || true
+            echo '===== LISTENERS ====='
+            ss -lntp || true
+            echo '===== HTTP ====='
+            curl -sv http://127.0.0.1:8080/captchaImage || true
+            echo '===== LOG ====='
+            cat /tmp/ruoyi.log || true
+          } > /tmp/runtime-diagnostics.txt 2>&1
+          cat /tmp/runtime-diagnostics.txt
           exit 1
 
       - name: Verify database connectivity after startup
@@ -87,8 +101,18 @@ jobs:
           echo "Redis key count: $COUNT"
           test "$COUNT" -gt 0
 
-      - name: Show backend log on failure
-        if: failure()
+      - name: Collect diagnostics
+        if: always()
         run: |
-          echo '===== /tmp/ruoyi.log ====='
-          cat /tmp/ruoyi.log || true
+          mkdir -p /tmp/ruoyi-artifact
+          cp /tmp/ruoyi.log /tmp/ruoyi-artifact/ruoyi.log 2>/dev/null || true
+          cp /tmp/runtime-diagnostics.txt /tmp/ruoyi-artifact/runtime-diagnostics.txt 2>/dev/null || true
+          cp /tmp/captcha.json /tmp/ruoyi-artifact/captcha.json 2>/dev/null || true
+
+      - name: Upload runtime diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ruoyi-runtime-diagnostics
+          path: /tmp/ruoyi-artifact
+          if-no-files-found: warn
