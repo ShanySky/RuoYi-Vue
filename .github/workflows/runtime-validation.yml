@@ -1,0 +1,94 @@
+name: RuoYi SpringBoot2 Runtime Validation
+
+on:
+  push:
+    branches:
+      - chatgpt/ruoyi-runtime-validation
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: password
+          MYSQL_DATABASE: ry-vue
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -ppassword"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+      redis:
+        image: redis:7.4
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 8
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '8'
+          cache: maven
+
+      - name: Initialize MySQL schema
+        run: |
+          mysql -h127.0.0.1 -uroot -ppassword ry-vue < sql/ry_20260417.sql
+          mysql -h127.0.0.1 -uroot -ppassword ry-vue < sql/quartz.sql
+          mysql -h127.0.0.1 -uroot -ppassword -Nse "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='ry-vue';"
+
+      - name: Verify Redis
+        run: |
+          redis-cli -h 127.0.0.1 ping
+
+      - name: Build backend
+        run: mvn -B -DskipTests clean package
+
+      - name: Start RuoYi backend
+        run: |
+          nohup java -jar ruoyi-admin/target/ruoyi-admin.jar > /tmp/ruoyi.log 2>&1 &
+          echo $! > /tmp/ruoyi.pid
+
+      - name: Wait for HTTP startup
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8080/captchaImage > /tmp/captcha.json; then
+              echo "RuoYi backend is responding"
+              cat /tmp/captcha.json
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "RuoYi backend did not become ready"
+          cat /tmp/ruoyi.log
+          exit 1
+
+      - name: Verify database connectivity after startup
+        run: |
+          mysql -h127.0.0.1 -uroot -ppassword -Nse "SELECT COUNT(*) FROM \`ry-vue\`.sys_user;"
+
+      - name: Verify Redis was used by captcha endpoint
+        run: |
+          COUNT=$(redis-cli -h 127.0.0.1 DBSIZE)
+          echo "Redis key count: $COUNT"
+          test "$COUNT" -gt 0
+
+      - name: Show backend log on failure
+        if: failure()
+        run: |
+          echo '===== /tmp/ruoyi.log ====='
+          cat /tmp/ruoyi.log || true
