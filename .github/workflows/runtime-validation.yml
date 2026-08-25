@@ -53,7 +53,7 @@ jobs:
 
       - name: Verify Redis
         run: |
-          redis-cli -h 127.0.0.1 ping
+          docker run --rm --network host redis:7.4 redis-cli -h 127.0.0.1 ping
 
       - name: Build backend
         run: mvn -B -DskipTests clean package
@@ -83,7 +83,7 @@ jobs:
 
       - name: Verify Redis was used by captcha endpoint
         run: |
-          COUNT=$(redis-cli -h 127.0.0.1 DBSIZE)
+          COUNT=$(docker run --rm --network host redis:7.4 redis-cli -h 127.0.0.1 DBSIZE)
           echo "Redis key count: $COUNT"
           test "$COUNT" -gt 0
 
