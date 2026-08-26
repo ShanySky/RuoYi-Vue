@@ -108,6 +108,23 @@ jobs:
         working-directory: frontend
         run: npm install
 
+      - name: Allow external preview host in Vite runtime config
+        working-directory: frontend
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('vite.config.js')
+          s = p.read_text()
+          needle = '    server: {\n'
+          if needle not in s:
+              needle = '    server: {\r\n'
+          if needle not in s:
+              raise SystemExit('Could not locate Vite server config')
+          s = s.replace(needle, needle + '      allowedHosts: true,\n', 1)
+          p.write_text(s)
+          PY
+          grep -A5 -n "server:" vite.config.js
+
       - name: Start Vue3 Vite frontend
         working-directory: frontend
         run: |
@@ -158,17 +175,24 @@ jobs:
       - name: Verify public preview
         run: |
           echo "Public URL: $PUBLIC_PREVIEW_URL"
-          for i in $(seq 1 30); do
-            if curl -fsS "$PUBLIC_PREVIEW_URL/" > /tmp/public-home.html && curl -fsS "$PUBLIC_PREVIEW_URL/dev-api/captchaImage" > /tmp/public-captcha.json; then
+          for i in $(seq 1 45); do
+            HOME_CODE=$(curl -sS -o /tmp/public-home.html -w '%{http_code}' "$PUBLIC_PREVIEW_URL/" || true)
+            API_CODE=$(curl -sS -o /tmp/public-captcha.json -w '%{http_code}' "$PUBLIC_PREVIEW_URL/dev-api/captchaImage" || true)
+            echo "Attempt $i: home=$HOME_CODE api=$API_CODE"
+            if [ "$HOME_CODE" = "200" ] && [ "$API_CODE" = "200" ]; then
               echo "Public preview is reachable"
               exit 0
             fi
             sleep 2
           done
-          cat /tmp/cloudflared.log
+          echo '===== cloudflared ====='
+          cat /tmp/cloudflared.log || true
+          echo '===== frontend ====='
+          cat /tmp/ruoyi-frontend.log || true
           exit 1
 
       - name: Upload preview details
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: public-preview-details
