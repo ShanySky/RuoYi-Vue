@@ -69,7 +69,7 @@ public class AiConfigService
         }
         provider.setName(StringUtils.isEmpty(request.getName()) ? "默认 AI 服务" : request.getName().trim());
         provider.setProviderType(PROVIDER_TYPE);
-        provider.setBaseUrl(openAiClient.normalizeBaseUrl(request.getBaseUrl()));
+        provider.setBaseUrl(openAiClient.validateBaseUrl(request.getBaseUrl()));
         if (StringUtils.isNotEmpty(token))
         {
             provider.setTokenCipher(cryptoService.encrypt(token));
@@ -146,7 +146,22 @@ public class AiConfigService
 
     public List<AiModel> listEnabledModels()
     {
+        AiProvider provider = providerMapper.selectFirst();
+        if (provider == null || !"0".equals(provider.getEnabled())
+                || StringUtils.isEmpty(provider.getBaseUrl()) || StringUtils.isEmpty(provider.getTokenCipher()))
+        {
+            return List.of();
+        }
         return modelMapper.selectEnabled();
+    }
+
+    public void requireAgentRuntimeEnabled()
+    {
+        AiProvider provider = requireProvider();
+        if (!"0".equals(provider.getEnabled()))
+        {
+            throw new ServiceException("AI 服务当前未启用");
+        }
     }
 
     public void setModelEnabled(Long modelId, boolean enabled)
