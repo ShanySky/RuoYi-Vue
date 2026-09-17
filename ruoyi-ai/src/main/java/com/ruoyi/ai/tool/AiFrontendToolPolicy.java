@@ -61,8 +61,8 @@ public class AiFrontendToolPolicy
                 continue;
             }
             // The browser only advertises availability. Description, schema, risk and permission
-            // are always taken from this server-side allowlist so a modified client cannot inject
-            // tool instructions or expand writable fields.
+            // always come from this server-side allowlist, so a modified client cannot inject
+            // model instructions or expand writable fields.
             approved.add(new ApprovedTool(candidate.getName(), policy.description(), policy.inputSchema(),
                     policy.riskLevel(), policy.requiredPermission()));
         }
@@ -79,7 +79,7 @@ public class AiFrontendToolPolicy
         return policy;
     }
 
-    private static Map<String, Object> objectSchema(Map<String, Object> properties, List<String> required)
+    private static Map<String, Object> objectSchema(Map<String, ?> properties, List<String> required)
     {
         Map<String, Object> schema = new LinkedHashMap<>();
         schema.put("type", "object");
@@ -100,5 +100,9 @@ public class AiFrontendToolPolicy
     public record ToolPolicy(String riskLevel, String requiredPermission, String description,
             Map<String, Object> inputSchema)
     {
+        public String defaultDescription()
+        {
+            return description;
+        }
     }
 }
