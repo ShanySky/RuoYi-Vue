@@ -153,6 +153,7 @@ jobs:
           curl -fsS -H "$AUTH" -H 'Content-Type: application/json' -X PUT -d '{"enabled":true}' "http://127.0.0.1:8080/ai/config/models/$MODEL_ID/enabled" >/tmp/enabled.json
           curl -fsS -H "$AUTH" -X PUT "http://127.0.0.1:8080/ai/config/models/$MODEL_ID/default" >/tmp/default.json
           curl -fsS -H "$AUTH" -X POST "http://127.0.0.1:8080/ai/config/models/$MODEL_ID/test-chat" | tee /tmp/test-chat.json | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["code"]==200; assert d["data"]=="AI_OK"'
+          curl -fsS -H "$AUTH" -X POST "http://127.0.0.1:8080/ai/config/models/$MODEL_ID/test-tools" | tee /tmp/test-tools.json | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["code"]==200; assert d["data"]=="SUPPORTED"'
 
           cat > /tmp/turn1.json <<JSON
           {"modelId":$MODEL_ID,"userMessage":"请查一下用户 ry","route":"/system/user","pageContext":{"pageName":"用户管理"},"frontendTools":[{"name":"page_system_user_search","description":"查询用户","inputSchema":{"type":"object","properties":{"userName":{"type":"string"}},"additionalProperties":false}}]}
@@ -178,6 +179,7 @@ jobs:
             /tmp/ruoyi-backend.log
             /tmp/mock-openai.log
             /tmp/test-chat.json
+            /tmp/test-tools.json
             /tmp/turn1-response.json
             /tmp/turn2-response.json
           if-no-files-found: warn
