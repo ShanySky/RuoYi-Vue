@@ -14,7 +14,8 @@ public interface AiConversationMapper
     @Options(useGeneratedKeys = true, keyProperty = "conversationId")
     int insert(AiConversation conversation);
 
-    @Select("select conversation_id, user_id, model_id, title, route, status, create_time, update_time from ai_conversation where conversation_id=#{conversationId}")
+    @Select("select conversation_id as conversationId, user_id as userId, model_id as modelId, title, route, status, "
+            + "create_time as createTime, update_time as updateTime from ai_conversation where conversation_id=#{conversationId}")
     AiConversation selectById(Long conversationId);
 
     @Update("update ai_conversation set route=#{route}, update_time=sysdate() where conversation_id=#{conversationId} and user_id=#{userId}")
