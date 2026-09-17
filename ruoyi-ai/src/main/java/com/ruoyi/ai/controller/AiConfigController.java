@@ -96,13 +96,13 @@ public class AiConfigController
     @PostMapping("/models/{modelId}/test-chat")
     public AjaxResult testChat(@PathVariable Long modelId)
     {
-        return AjaxResult.success(configService.testChat(modelId));
+        return AjaxResult.success("操作成功", configService.testChat(modelId));
     }
 
     @PreAuthorize("@ss.hasPermi('ai:config:edit')")
     @PostMapping("/models/{modelId}/test-tools")
     public AjaxResult testTools(@PathVariable Long modelId)
     {
-        return AjaxResult.success(capabilityService.testToolCalling(modelId));
+        return AjaxResult.success("操作成功", capabilityService.testToolCalling(modelId));
     }
 }
