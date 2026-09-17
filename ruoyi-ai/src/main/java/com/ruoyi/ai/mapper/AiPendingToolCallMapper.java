@@ -15,9 +15,9 @@ public interface AiPendingToolCallMapper
     int insert(AiPendingToolCall pending);
 
     @Select("select pending_id, call_id, conversation_id, user_id, tool_name, arguments_json, risk_level, status, create_time, expire_time, resolved_time "
-            + "from ai_pending_tool_call where conversation_id=#{conversationId} and call_id=#{callId} limit 1")
+            + "from ai_pending_tool_call where conversation_id=#{conversationId} and call_id=#{callId} and status='PENDING' and expire_time > sysdate() limit 1")
     AiPendingToolCall selectByCall(@Param("conversationId") Long conversationId, @Param("callId") String callId);
 
-    @Update("update ai_pending_tool_call set status='RESOLVED', resolved_time=sysdate() where pending_id=#{pendingId} and status='PENDING'")
+    @Update("update ai_pending_tool_call set status='RESOLVED', resolved_time=sysdate() where pending_id=#{pendingId} and status='PENDING' and expire_time > sysdate()")
     int resolve(Long pendingId);
 }
