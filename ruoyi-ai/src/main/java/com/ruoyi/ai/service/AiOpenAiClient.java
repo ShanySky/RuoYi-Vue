@@ -90,6 +90,30 @@ public class AiOpenAiClient
         return value;
     }
 
+    public String validateBaseUrl(String baseUrl)
+    {
+        String value = normalizeBaseUrl(baseUrl);
+        if (StringUtils.isEmpty(value))
+        {
+            throw new ServiceException("Base URL 不能为空");
+        }
+        try
+        {
+            URI uri = URI.create(value);
+            String scheme = uri.getScheme();
+            if (!("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))
+                    || StringUtils.isEmpty(uri.getHost()) || uri.getRawQuery() != null || uri.getRawFragment() != null)
+            {
+                throw new IllegalArgumentException("unsupported endpoint");
+            }
+            return value;
+        }
+        catch (Exception e)
+        {
+            throw new ServiceException("Base URL 必须是有效且不含 query/fragment 的 HTTP/HTTPS 地址");
+        }
+    }
+
     private RestClient buildRestClient(String baseUrl, String token, int timeoutSeconds)
     {
         JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory();
@@ -103,26 +127,10 @@ public class AiOpenAiClient
 
     private void validateEndpoint(String baseUrl, String token)
     {
-        if (StringUtils.isEmpty(baseUrl))
-        {
-            throw new ServiceException("Base URL 不能为空");
-        }
+        validateBaseUrl(baseUrl);
         if (StringUtils.isEmpty(token))
         {
             throw new ServiceException("Token 不能为空");
-        }
-        try
-        {
-            URI uri = URI.create(normalizeBaseUrl(baseUrl));
-            String scheme = uri.getScheme();
-            if (!("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme)) || StringUtils.isEmpty(uri.getHost()))
-            {
-                throw new IllegalArgumentException("unsupported endpoint");
-            }
-        }
-        catch (Exception e)
-        {
-            throw new ServiceException("Base URL 必须是有效的 HTTP/HTTPS 地址");
         }
     }
 
