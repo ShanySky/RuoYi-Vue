@@ -1,0 +1,251 @@
+name: AI Agent Fullstack E2E
+
+on:
+  push:
+    branches:
+      - chatgpt/ai-agent-assistant
+    paths:
+      - '.github/workflows/ai-agent-fullstack-e2e.yml'
+      - 'ruoyi-ai/**'
+      - 'sql/ai_20260918.sql'
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: password
+          MYSQL_DATABASE: ry-vue
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -ppassword"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+      redis:
+        image: redis:7.4
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+
+    steps:
+      - name: Checkout backend
+        uses: actions/checkout@v4
+        with:
+          path: backend
+
+      - name: Checkout Vue3 frontend
+        uses: actions/checkout@v4
+        with:
+          repository: ShanySky/RuoYi-Vue3
+          ref: chatgpt/ai-agent-assistant
+          path: frontend
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Initialize database
+        run: |
+          mysql -h127.0.0.1 -uroot -ppassword ry-vue < backend/sql/ry_20260417.sql
+          mysql -h127.0.0.1 -uroot -ppassword ry-vue < backend/sql/quartz.sql
+          mysql -h127.0.0.1 -uroot -ppassword ry-vue < backend/sql/ai_20260918.sql
+          mysql -h127.0.0.1 -uroot -ppassword -e "update sys_config set config_value='false' where config_key='sys.account.captchaEnabled'" ry-vue
+
+      - name: Build backend
+        working-directory: backend
+        run: mvn -B -DskipTests clean package
+
+      - name: Start deterministic OpenAI-compatible mock
+        run: |
+          cat > /tmp/mock_openai.py <<'PY'
+          import json
+          import time
+          from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+          def tool_call(name, args, call_id):
+              return {
+                  'role': 'assistant',
+                  'content': None,
+                  'tool_calls': [{
+                      'id': call_id,
+                      'type': 'function',
+                      'function': {'name': name, 'arguments': json.dumps(args, ensure_ascii=False)}
+                  }]
+              }
+
+          class Handler(BaseHTTPRequestHandler):
+              def log_message(self, fmt, *args):
+                  print(fmt % args, flush=True)
+
+              def send_json(self, status, obj):
+                  payload = json.dumps(obj, ensure_ascii=False).encode()
+                  self.send_response(status)
+                  self.send_header('Content-Type', 'application/json')
+                  self.send_header('Content-Length', str(len(payload)))
+                  self.end_headers()
+                  self.wfile.write(payload)
+
+              def do_GET(self):
+                  if self.path == '/v1/models':
+                      self.send_json(200, {
+                          'object': 'list',
+                          'data': [{
+                              'id': 'mock-agent-model',
+                              'object': 'model',
+                              'created': int(time.time()),
+                              'owned_by': 'e2e'
+                          }]
+                      })
+                  else:
+                      self.send_json(404, {'error': 'not found'})
+
+              def do_POST(self):
+                  length = int(self.headers.get('Content-Length', '0'))
+                  body = json.loads(self.rfile.read(length) or b'{}')
+                  if self.path != '/v1/chat/completions':
+                      self.send_json(404, {'error': 'not found'})
+                      return
+
+                  messages = body.get('messages') or []
+                  tools = body.get('tools') or []
+                  names = [((tool.get('function') or {}).get('name')) for tool in tools]
+                  finish = 'stop'
+
+                  if 'ai_echo_test' in names:
+                      message = tool_call('ai_echo_test', {'value': 'AI_OK'}, 'call_capability_1')
+                      finish = 'tool_calls'
+                  elif any(name and name.startswith('page_system_user_') for name in names):
+                      tool_results = [msg for msg in messages if msg.get('role') == 'tool']
+                      step = len(tool_results)
+                      if step == 0:
+                          message = tool_call('page_system_user_search', {'userName': 'ry'}, 'call_e2e_1')
+                          finish = 'tool_calls'
+                      elif step == 1:
+                          message = tool_call('page_system_user_edit_open', {'userId': 2}, 'call_e2e_2')
+                          finish = 'tool_calls'
+                      elif step == 2:
+                          message = tool_call('page_system_user_edit_set_fields', {'nickName': 'AI闭环测试'}, 'call_e2e_3')
+                          finish = 'tool_calls'
+                      elif step == 3:
+                          message = tool_call('page_system_user_edit_submit', {}, 'call_e2e_4')
+                          finish = 'tool_calls'
+                      else:
+                          message = {'role': 'assistant', 'content': 'E2E_DONE'}
+                  else:
+                      message = {'role': 'assistant', 'content': 'AI_OK'}
+
+                  self.send_json(200, {
+                      'id': 'chatcmpl-e2e',
+                      'object': 'chat.completion',
+                      'created': int(time.time()),
+                      'model': body.get('model', 'mock-agent-model'),
+                      'choices': [{'index': 0, 'message': message, 'finish_reason': finish}],
+                      'usage': {'prompt_tokens': 1, 'completion_tokens': 1, 'total_tokens': 2}
+                  })
+
+          ThreadingHTTPServer(('127.0.0.1', 18080), Handler).serve_forever()
+          PY
+
+          nohup python3 /tmp/mock_openai.py > /tmp/mock-openai.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:18080/v1/models >/tmp/mock-models.json; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/mock-openai.log
+          exit 1
+
+      - name: Start RuoYi backend
+        working-directory: backend
+        env:
+          AI_MASTER_KEY: e2e-isolated-master-key
+        run: |
+          sudo mkdir -p /home/ruoyi/logs /home/ruoyi/uploadPath
+          sudo chown -R "$USER":"$USER" /home/ruoyi
+          nohup java -jar ruoyi-admin/target/ruoyi-admin.jar > /tmp/ruoyi-backend.log 2>&1 &
+          echo $! > /tmp/ruoyi-backend.pid
+          for i in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:8080/captchaImage >/tmp/captcha.json; then
+              exit 0
+            fi
+            if ! kill -0 "$(cat /tmp/ruoyi-backend.pid)" 2>/dev/null; then
+              cat /tmp/ruoyi-backend.log
+              exit 1
+            fi
+            sleep 2
+          done
+          cat /tmp/ruoyi-backend.log
+          exit 1
+
+      - name: Install frontend and browser
+        working-directory: frontend
+        run: |
+          npm install
+          npm install --no-save playwright@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Start Vue3 frontend
+        working-directory: frontend
+        run: |
+          nohup npm run dev -- --host 127.0.0.1 --port 5173 > /tmp/ruoyi-frontend.log 2>&1 &
+          echo $! > /tmp/ruoyi-frontend.pid
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:5173/ >/tmp/frontend.html               && curl -fsS http://127.0.0.1:5173/dev-api/captchaImage >/tmp/frontend-captcha.json; then
+              exit 0
+            fi
+            sleep 2
+          done
+          cat /tmp/ruoyi-frontend.log
+          exit 1
+
+      - name: Run browser closed-loop acceptance
+        working-directory: frontend
+        env:
+          APP_URL: http://127.0.0.1:5173
+          BACKEND_URL: http://127.0.0.1:8080
+          PROVIDER_URL: http://127.0.0.1:18080/v1
+          PROVIDER_TOKEN: e2e-provider-placeholder
+          TEST_NICKNAME: AI闭环测试
+        run: node tests/ai-agent-e2e.mjs
+
+      - name: Verify persistence, audit redaction and Agent state
+        run: |
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select nick_name from sys_user where user_id=2" ry-vue)" = "AI闭环测试"
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_pending_tool_call where status='RESOLVED'" ry-vue)" -ge 4
+          sleep 2
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from sys_oper_log where title='AI 服务配置' and oper_param like '%e2e-provider-placeholder%'" ry-vue)" = "0"
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_provider where token_cipher like 'v1:%' and token_cipher not like '%e2e-provider-placeholder%'" ry-vue)" = "1"
+          mysql -h127.0.0.1 -uroot -ppassword -e "update sys_user set nick_name='若依' where user_id=2" ry-vue
+
+      - name: Upload E2E diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-agent-fullstack-e2e
+          path: |
+            frontend/test-results/
+            /tmp/ruoyi-backend.log
+            /tmp/ruoyi-frontend.log
+            /tmp/mock-openai.log
+          if-no-files-found: warn
