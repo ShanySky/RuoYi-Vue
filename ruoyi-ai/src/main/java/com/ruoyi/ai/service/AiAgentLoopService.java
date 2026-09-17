@@ -44,17 +44,19 @@ public class AiAgentLoopService
     private final AiPendingToolCallMapper pendingMapper;
     private final AiFrontendToolPolicy toolPolicy;
     private final AiAgentModelFactory modelFactory;
+    private final AiConfigService configService;
     private final ObjectMapper objectMapper;
 
     public AiAgentLoopService(AiConversationMapper conversationMapper, AiMessageMapper messageMapper,
             AiPendingToolCallMapper pendingMapper, AiFrontendToolPolicy toolPolicy, AiAgentModelFactory modelFactory,
-            ObjectMapper objectMapper)
+            AiConfigService configService, ObjectMapper objectMapper)
     {
         this.conversationMapper = conversationMapper;
         this.messageMapper = messageMapper;
         this.pendingMapper = pendingMapper;
         this.toolPolicy = toolPolicy;
         this.modelFactory = modelFactory;
+        this.configService = configService;
         this.objectMapper = objectMapper;
     }
 
@@ -80,6 +82,7 @@ public class AiAgentLoopService
 
     private AiChatTurnResponse callModel(AiConversation conversation, AiChatTurnRequest request)
     {
+        configService.requireAgentRuntimeEnabled();
         List<ApprovedTool> approvedTools = toolPolicy.approve(request.getFrontendTools());
         List<ToolCallback> callbacks = new ArrayList<>();
         for (ApprovedTool tool : approvedTools)
