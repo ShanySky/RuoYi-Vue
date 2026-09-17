@@ -76,7 +76,7 @@ create table if not exists ai_pending_tool_call (
   expire_time       datetime        default null,
   resolved_time     datetime        default null,
   primary key (pending_id),
-  unique key uk_ai_pending_call_id (call_id),
+  unique key uk_ai_pending_conversation_call (conversation_id, call_id),
   key idx_ai_pending_conversation (conversation_id, status)
 ) engine=innodb comment='AI 前端工具待执行调用';
 

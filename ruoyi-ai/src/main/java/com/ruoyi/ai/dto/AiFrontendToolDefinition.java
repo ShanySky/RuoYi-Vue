@@ -1,0 +1,17 @@
+package com.ruoyi.ai.dto;
+
+import java.util.Map;
+
+public class AiFrontendToolDefinition
+{
+    private String name;
+    private String description;
+    private Map<String, Object> inputSchema;
+
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+    public String getDescription() { return description; }
+    public void setDescription(String description) { this.description = description; }
+    public Map<String, Object> getInputSchema() { return inputSchema; }
+    public void setInputSchema(Map<String, Object> inputSchema) { this.inputSchema = inputSchema; }
+}
