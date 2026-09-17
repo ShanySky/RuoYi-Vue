@@ -9,7 +9,7 @@ on:
 jobs:
   backend:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     services:
       mysql:
         image: mysql:8.0
@@ -47,7 +47,135 @@ jobs:
           mysql -h127.0.0.1 -uroot -ppassword ry-vue < sql/ry_20260417.sql
           mysql -h127.0.0.1 -uroot -ppassword ry-vue < sql/quartz.sql
           mysql -h127.0.0.1 -uroot -ppassword ry-vue < sql/ai_20260918.sql
-          mysql -h127.0.0.1 -uroot -ppassword -Nse "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='ry-vue' AND table_name LIKE 'ai_%';"
+          mysql -h127.0.0.1 -uroot -ppassword -e "update sys_config set config_value='false' where config_key='sys.account.captchaEnabled'" ry-vue
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='ry-vue' AND table_name LIKE 'ai_%';")" = "5"
 
       - name: Build backend
         run: mvn -B -DskipTests clean package
+
+      - name: Start mock OpenAI-compatible provider
+        run: |
+          cat > /tmp/mock_openai.py <<'PY'
+          import json, time
+          from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+          class Handler(BaseHTTPRequestHandler):
+              def log_message(self, fmt, *args):
+                  print(fmt % args, flush=True)
+
+              def send_json(self, status, obj):
+                  payload = json.dumps(obj, ensure_ascii=False).encode()
+                  self.send_response(status)
+                  self.send_header('Content-Type', 'application/json')
+                  self.send_header('Content-Length', str(len(payload)))
+                  self.end_headers()
+                  self.wfile.write(payload)
+
+              def do_GET(self):
+                  if self.path == '/v1/models':
+                      self.send_json(200, {'object':'list','data':[{'id':'mock-agent-model','object':'model','created':int(time.time()),'owned_by':'ci'}]})
+                  else:
+                      self.send_json(404, {'error':'not found'})
+
+              def do_POST(self):
+                  length = int(self.headers.get('Content-Length', '0'))
+                  body = json.loads(self.rfile.read(length) or b'{}')
+                  if self.path != '/v1/chat/completions':
+                      self.send_json(404, {'error':'not found'})
+                      return
+                  messages = body.get('messages') or []
+                  tools = body.get('tools') or []
+                  last = messages[-1] if messages else {}
+                  if last.get('role') == 'tool':
+                      message = {'role':'assistant','content':'TOOL_RESULT_ACCEPTED'}
+                      finish = 'stop'
+                  elif tools:
+                      names = [((t.get('function') or {}).get('name')) for t in tools]
+                      name = 'page_system_user_search' if 'page_system_user_search' in names else names[0]
+                      args = {'userName':'ry'} if name == 'page_system_user_search' else {}
+                      message = {'role':'assistant','content':None,'tool_calls':[{'id':'call_ci_1','type':'function','function':{'name':name,'arguments':json.dumps(args)}}]}
+                      finish = 'tool_calls'
+                  else:
+                      message = {'role':'assistant','content':'AI_OK'}
+                      finish = 'stop'
+                  self.send_json(200, {
+                      'id':'chatcmpl-ci','object':'chat.completion','created':int(time.time()),'model':body.get('model','mock-agent-model'),
+                      'choices':[{'index':0,'message':message,'finish_reason':finish}],
+                      'usage':{'prompt_tokens':1,'completion_tokens':1,'total_tokens':2}
+                  })
+
+          ThreadingHTTPServer(('127.0.0.1', 18080), Handler).serve_forever()
+          PY
+          nohup python3 /tmp/mock_openai.py > /tmp/mock-openai.log 2>&1 &
+          echo $! > /tmp/mock-openai.pid
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:18080/v1/models >/tmp/models.json && exit 0
+            sleep 1
+          done
+          cat /tmp/mock-openai.log
+          exit 1
+
+      - name: Start RuoYi backend
+        env:
+          AI_MASTER_KEY: ci-only-master-key
+        run: |
+          sudo mkdir -p /home/ruoyi/logs /home/ruoyi/uploadPath
+          sudo chown -R "$USER":"$USER" /home/ruoyi
+          nohup java -jar ruoyi-admin/target/ruoyi-admin.jar > /tmp/ruoyi-backend.log 2>&1 &
+          echo $! > /tmp/ruoyi-backend.pid
+          for i in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:8080/captchaImage >/tmp/captcha.json; then
+              exit 0
+            fi
+            if ! kill -0 "$(cat /tmp/ruoyi-backend.pid)" 2>/dev/null; then
+              cat /tmp/ruoyi-backend.log
+              exit 1
+            fi
+            sleep 2
+          done
+          cat /tmp/ruoyi-backend.log
+          exit 1
+
+      - name: Verify AI Provider and Agent API
+        run: |
+          set -euo pipefail
+          LOGIN=$(curl -fsS -H 'Content-Type: application/json' -d '{"username":"admin","password":"admin123"}' http://127.0.0.1:8080/login)
+          TOKEN=$(printf '%s' "$LOGIN" | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')
+          AUTH="Authorization: Bearer $TOKEN"
+
+          PROVIDER=$(curl -fsS -H "$AUTH" -H 'Content-Type: application/json' \
+            -d '{"name":"CI Mock","baseUrl":"http://127.0.0.1:18080/v1","token":"ci-token","enabled":true,"timeoutSeconds":10}' \
+            http://127.0.0.1:8080/ai/config/provider)
+          printf '%s' "$PROVIDER" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["code"]==200; assert d["data"]["hasToken"] is True; assert "tokenCipher" not in d["data"]'
+
+          curl -fsS -H "$AUTH" -X POST http://127.0.0.1:8080/ai/config/models/sync > /tmp/sync.json
+          MODEL_ID=$(curl -fsS -H "$AUTH" http://127.0.0.1:8080/ai/config/models | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["code"]==200; print(d["data"][0]["modelId"])')
+          curl -fsS -H "$AUTH" -H 'Content-Type: application/json' -X PUT -d '{"enabled":true}' "http://127.0.0.1:8080/ai/config/models/$MODEL_ID/enabled" >/tmp/enabled.json
+          curl -fsS -H "$AUTH" -X PUT "http://127.0.0.1:8080/ai/config/models/$MODEL_ID/default" >/tmp/default.json
+          curl -fsS -H "$AUTH" -X POST "http://127.0.0.1:8080/ai/config/models/$MODEL_ID/test-chat" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["code"]==200; assert d["answer"]=="AI_OK"'
+
+          cat > /tmp/turn1.json <<JSON
+          {"modelId":$MODEL_ID,"userMessage":"请查一下用户 ry","route":"/system/user","pageContext":{"pageName":"用户管理"},"frontendTools":[{"name":"page_system_user_search","description":"查询用户","inputSchema":{"type":"object","properties":{"userName":{"type":"string"}},"additionalProperties":false}}]}
+          JSON
+          TURN1=$(curl -fsS -H "$AUTH" -H 'Content-Type: application/json' --data-binary @/tmp/turn1.json http://127.0.0.1:8080/ai/chat/turn)
+          printf '%s' "$TURN1" >/tmp/turn1-response.json
+          CONV_ID=$(printf '%s' "$TURN1" | python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["type"]=="TOOL_CALL"; assert d["toolCall"]["name"]=="page_system_user_search"; print(d["conversationId"])')
+          CALL_ID=$(printf '%s' "$TURN1" | python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["toolCall"]["callId"])')
+
+          cat > /tmp/turn2.json <<JSON
+          {"conversationId":$CONV_ID,"toolResult":{"callId":"$CALL_ID","success":true,"result":{"total":1,"rows":[{"userId":2,"userName":"ry","nickName":"若依"}]}},"route":"/system/user","pageContext":{"pageName":"用户管理","total":1},"frontendTools":[{"name":"page_system_user_search","description":"查询用户","inputSchema":{"type":"object","properties":{"userName":{"type":"string"}},"additionalProperties":false}}]}
+          JSON
+          curl -fsS -H "$AUTH" -H 'Content-Type: application/json' --data-binary @/tmp/turn2.json http://127.0.0.1:8080/ai/chat/turn | python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["type"]=="MESSAGE"; assert d["message"]=="TOOL_RESULT_ACCEPTED"'
+
+          mysql -h127.0.0.1 -uroot -ppassword -Nse "select concat((select count(*) from ai_conversation),' ',(select count(*) from ai_message),' ',(select count(*) from ai_pending_tool_call where status='RESOLVED'))" ry-vue
+
+      - name: Upload diagnostic logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-backend-ci-logs
+          path: |
+            /tmp/ruoyi-backend.log
+            /tmp/mock-openai.log
+            /tmp/turn1-response.json
+          if-no-files-found: warn
