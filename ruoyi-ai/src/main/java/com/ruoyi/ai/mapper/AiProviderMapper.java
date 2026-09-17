@@ -8,7 +8,10 @@ import com.ruoyi.ai.domain.AiProvider;
 
 public interface AiProviderMapper
 {
-    @Select("select provider_id, name, provider_type, base_url, token_cipher, enabled, timeout_seconds, create_by, create_time, update_by, update_time, remark from ai_provider order by provider_id limit 1")
+    @Select("select provider_id as providerId, name, provider_type as providerType, base_url as baseUrl, "
+            + "token_cipher as tokenCipher, enabled, timeout_seconds as timeoutSeconds, create_by as createBy, "
+            + "create_time as createTime, update_by as updateBy, update_time as updateTime, remark "
+            + "from ai_provider order by provider_id limit 1")
     AiProvider selectFirst();
 
     @Insert("insert into ai_provider(name, provider_type, base_url, token_cipher, enabled, timeout_seconds, create_by, create_time, remark) "
