@@ -1,6 +1,6 @@
 name: AI Agent Fullstack E2E
 
-# Closed-loop acceptance checks out the current Vue3 development branch head on every run.
+# Closed-loop acceptance always uses the current Vue3 development branch head.
 
 on:
   push:
