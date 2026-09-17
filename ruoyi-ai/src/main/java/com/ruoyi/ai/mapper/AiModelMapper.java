@@ -10,20 +10,21 @@ import com.ruoyi.ai.domain.AiModel;
 
 public interface AiModelMapper
 {
-    @Select("select model_id, provider_id, model_code, display_name, enabled, default_model, tool_capability, last_sync_time, create_by, create_time, update_by, update_time, remark "
-            + "from ai_model where provider_id=#{providerId} order by model_code")
+    String SELECT_FIELDS = "select model_id as modelId, provider_id as providerId, model_code as modelCode, "
+            + "display_name as displayName, enabled, default_model as defaultModel, tool_capability as toolCapability, "
+            + "last_sync_time as lastSyncTime, create_by as createBy, create_time as createTime, update_by as updateBy, "
+            + "update_time as updateTime, remark ";
+
+    @Select(SELECT_FIELDS + "from ai_model where provider_id=#{providerId} order by model_code")
     List<AiModel> selectByProviderId(Long providerId);
 
-    @Select("select model_id, provider_id, model_code, display_name, enabled, default_model, tool_capability, last_sync_time, create_by, create_time, update_by, update_time, remark "
-            + "from ai_model where enabled='0' order by default_model asc, model_code")
+    @Select(SELECT_FIELDS + "from ai_model where enabled='0' order by default_model asc, model_code")
     List<AiModel> selectEnabled();
 
-    @Select("select model_id, provider_id, model_code, display_name, enabled, default_model, tool_capability, last_sync_time, create_by, create_time, update_by, update_time, remark "
-            + "from ai_model where model_id=#{modelId}")
+    @Select(SELECT_FIELDS + "from ai_model where model_id=#{modelId}")
     AiModel selectById(Long modelId);
 
-    @Select("select model_id, provider_id, model_code, display_name, enabled, default_model, tool_capability, last_sync_time, create_by, create_time, update_by, update_time, remark "
-            + "from ai_model where provider_id=#{providerId} and model_code=#{modelCode} limit 1")
+    @Select(SELECT_FIELDS + "from ai_model where provider_id=#{providerId} and model_code=#{modelCode} limit 1")
     AiModel selectByProviderAndCode(@Param("providerId") Long providerId, @Param("modelCode") String modelCode);
 
     @Insert("insert into ai_model(provider_id, model_code, display_name, enabled, default_model, tool_capability, last_sync_time, create_by, create_time, remark) "
