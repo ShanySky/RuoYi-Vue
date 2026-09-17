@@ -93,6 +93,6 @@ public class AiConfigController
     @PostMapping("/models/{modelId}/test-chat")
     public AjaxResult testChat(@PathVariable Long modelId)
     {
-        return AjaxResult.success("answer", configService.testChat(modelId));
+        return AjaxResult.success(configService.testChat(modelId));
     }
 }
