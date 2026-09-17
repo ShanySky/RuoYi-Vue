@@ -14,6 +14,7 @@ import com.ruoyi.ai.domain.AiModel;
 import com.ruoyi.ai.dto.AiModelStatusRequest;
 import com.ruoyi.ai.dto.AiProviderSaveRequest;
 import com.ruoyi.ai.service.AiConfigService;
+import com.ruoyi.ai.service.AiModelCapabilityService;
 import com.ruoyi.common.annotation.Log;
 import com.ruoyi.common.core.domain.AjaxResult;
 import com.ruoyi.common.enums.BusinessType;
@@ -23,10 +24,12 @@ import com.ruoyi.common.enums.BusinessType;
 public class AiConfigController
 {
     private final AiConfigService configService;
+    private final AiModelCapabilityService capabilityService;
 
-    public AiConfigController(AiConfigService configService)
+    public AiConfigController(AiConfigService configService, AiModelCapabilityService capabilityService)
     {
         this.configService = configService;
+        this.capabilityService = capabilityService;
     }
 
     @PreAuthorize("@ss.hasPermi('ai:config:view')")
@@ -94,5 +97,12 @@ public class AiConfigController
     public AjaxResult testChat(@PathVariable Long modelId)
     {
         return AjaxResult.success(configService.testChat(modelId));
+    }
+
+    @PreAuthorize("@ss.hasPermi('ai:config:edit')")
+    @PostMapping("/models/{modelId}/test-tools")
+    public AjaxResult testTools(@PathVariable Long modelId)
+    {
+        return AjaxResult.success(capabilityService.testToolCalling(modelId));
     }
 }
