@@ -40,7 +40,7 @@ public class AiConfigController
     }
 
     @PreAuthorize("@ss.hasPermi('ai:config:edit')")
-    @Log(title = "AI 服务配置", businessType = BusinessType.UPDATE)
+    @Log(title = "AI 服务配置", businessType = BusinessType.UPDATE, excludeParamNames = { "token" })
     @PostMapping("/provider")
     public AjaxResult saveProvider(@Validated @RequestBody AiProviderSaveRequest request)
     {
