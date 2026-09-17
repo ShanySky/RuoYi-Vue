@@ -13,7 +13,8 @@ public interface AiMessageMapper
     @Options(useGeneratedKeys = true, keyProperty = "messageId")
     int insert(AiMessage message);
 
-    @Select("select message_id, conversation_id, sequence_no, role, content, tool_call_id, tool_name, tool_arguments, create_time "
+    @Select("select message_id as messageId, conversation_id as conversationId, sequence_no as sequenceNo, role, content, "
+            + "tool_call_id as toolCallId, tool_name as toolName, tool_arguments as toolArguments, create_time as createTime "
             + "from ai_message where conversation_id=#{conversationId} order by sequence_no")
     List<AiMessage> selectByConversationId(Long conversationId);
 
