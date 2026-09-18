@@ -39,7 +39,7 @@ public class AiAgentModelFactory
             throw new com.ruoyi.common.exception.ServiceException("模型与当前 Provider 不匹配");
         }
         int timeout = provider.getTimeoutSeconds() == null ? 30 : provider.getTimeoutSeconds();
-        OpenAiChatOptions.Builder builder = OpenAiChatOptions.builder()
+        var builder = OpenAiChatOptions.builder()
                 .baseUrl(provider.getBaseUrl())
                 .apiKey(cryptoService.decrypt(provider.getTokenCipher()))
                 .model(model.getModelCode())
