@@ -2,10 +2,10 @@ package com.ruoyi.ai.domain;
 import java.util.Date;
 public class AiRun {
  private Long runId,conversationId,userId,modelId,supersededByRunId,inputTokens,cacheReadTokens,cacheWriteTokens,totalTokens;
- private String modelCode,reasoningEffort,status,cancelReason;
+ private String clientRunKey,modelCode,reasoningEffort,status,cancelReason;
  private Integer systemPromptVersion,compactionPromptVersion;
  private Date createTime,updateTime,endTime;
- public Long getRunId(){return runId;} public void setRunId(Long v){runId=v;}
+ public Long getRunId(){return runId;} public void setRunId(Long v){runId=v;} public String getClientRunKey(){return clientRunKey;} public void setClientRunKey(String v){clientRunKey=v;}
  public Long getConversationId(){return conversationId;} public void setConversationId(Long v){conversationId=v;}
  public Long getUserId(){return userId;} public void setUserId(Long v){userId=v;}
  public Long getModelId(){return modelId;} public void setModelId(Long v){modelId=v;}
