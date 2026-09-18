@@ -21,6 +21,7 @@ create table if not exists ai_model (
   provider_id       bigint(20)      not null,
   model_code        varchar(191)    not null,
   display_name      varchar(191)    not null,
+  selected          char(1)         not null default '0'       comment '0已加入系统 1已移除',
   enabled           char(1)         not null default '1'       comment '0启用 1停用',
   default_model     char(1)         not null default '1'       comment '0默认 1普通',
   tool_capability   varchar(16)     not null default 'UNKNOWN' comment 'UNKNOWN/SUPPORTED/UNSUPPORTED',
