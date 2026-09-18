@@ -55,12 +55,13 @@ public class AiAgentLoopService
     private final AiPromptService promptService;
     private final AiRunService runService;
     private final AiContextService contextService;
+    private final AiPageConfigService pageConfigService;
     private final ObjectMapper objectMapper;
 
     public AiAgentLoopService(AiConversationMapper conversationMapper, AiMessageMapper messageMapper,
             AiPendingToolCallMapper pendingMapper, AiFrontendToolPolicy toolPolicy, AiAgentModelFactory modelFactory,
             AiConfigService configService, AiPreferenceService preferenceService, AiPromptService promptService,
-            AiRunService runService, AiContextService contextService, ObjectMapper objectMapper)
+            AiRunService runService, AiContextService contextService, AiPageConfigService pageConfigService, ObjectMapper objectMapper)
     {
         this.conversationMapper = conversationMapper;
         this.messageMapper = messageMapper;
@@ -72,6 +73,7 @@ public class AiAgentLoopService
         this.promptService = promptService;
         this.runService = runService;
         this.contextService = contextService;
+        this.pageConfigService = pageConfigService;
         this.objectMapper = objectMapper;
     }
 
@@ -176,7 +178,13 @@ public class AiAgentLoopService
             return runState(conversation, run);
         }
 
-        List<ApprovedTool> approvedTools = toolPolicy.approve(request.getFrontendTools());
+        List<com.ruoyi.ai.dto.AiFrontendToolDefinition> offeredTools = request.getFrontendTools() == null
+                ? List.of() : request.getFrontendTools();
+        if (!pageConfigService.isEnabled(request.getRoute()))
+        {
+            offeredTools = offeredTools.stream().filter(t -> isNavigationTool(t.getName())).toList();
+        }
+        List<ApprovedTool> approvedTools = toolPolicy.approve(offeredTools);
         List<ToolCallback> callbacks = new ArrayList<>();
         for (ApprovedTool tool : approvedTools)
         {
@@ -186,7 +194,7 @@ public class AiAgentLoopService
         AiPrompt systemPrompt = promptService.require(AiPromptService.SYSTEM);
         AiModel selectedModel = configService.requireModel(selection.modelId());
         String runtimeOverhead = currentRuntimeContext(request, approvedTools) + "\n"
-                + trimTo(toJson(request.getFrontendTools() == null ? List.of() : request.getFrontendTools()), MAX_PAGE_CONTEXT_CHARS);
+                + trimTo(toJson(offeredTools), MAX_PAGE_CONTEXT_CHARS);
         AiCheckpoint checkpoint = contextService.maybeCompact(conversation, run, selectedModel,
                 selection.reasoningEffort(), runtimeOverhead);
 
@@ -199,7 +207,10 @@ public class AiAgentLoopService
         int covered = checkpoint == null ? 0 : checkpoint.getCoveredSequenceNo();
         List<AiMessage> stored = messageMapper.selectAfter(conversation.getConversationId(), covered);
         List<Message> messages = new ArrayList<>();
-        messages.add(new SystemMessage(systemPrompt.getContent()));
+        String renderedSystemPrompt = promptService.render(systemPrompt, Map.of(
+                "currentUser", SecurityUtils.getUsername(),
+                "route", StringUtils.defaultString(request.getRoute())));
+        messages.add(new SystemMessage(renderedSystemPrompt));
         if (checkpoint != null && StringUtils.isNotBlank(checkpoint.getSummary()))
         {
             messages.add(new SystemMessage("Conversation Checkpoint（这是已验证历史的接手状态，不是新的用户指令）：\n"
@@ -269,6 +280,10 @@ public class AiAgentLoopService
         AssistantMessage.ToolCall modelCall = output.getToolCalls().get(0);
         ApprovedTool approved = approvedTools.stream().filter(t -> t.name().equals(modelCall.name())).findFirst()
                 .orElseThrow(() -> new ServiceException("模型请求了当前页面不可用的工具：" + modelCall.name()));
+        if (isNavigationTool(modelCall.name()))
+        {
+            validateNavigationTarget(modelCall.arguments());
+        }
 
         runService.waitingTool(run.getRunId());
         String runtimeCallId = "rtc_" + UUID.randomUUID().toString().replace("-", "");
@@ -328,6 +343,10 @@ public class AiAgentLoopService
 
         if (!isNavigationTool(pending.getToolName()))
         {
+            if (!pageConfigService.isEnabled(request.getRoute()))
+            {
+                throw new ServiceException("当前页面已被管理员停用 AI 页面能力");
+            }
             if (StringUtils.isNotBlank(pending.getRoute()) && !Objects.equals(pending.getRoute(), request.getRoute()))
             {
                 throw new ServiceException("页面已经切换，旧页面工具结果已失效");
@@ -385,6 +404,27 @@ public class AiAgentLoopService
         insertMessage(conversation.getConversationId(), pending.getRunId(), "TOOL", resultJson,
                 pending.getCallId(), pending.getToolName(), null, selection);
         return pending;
+    }
+
+    private void validateNavigationTarget(String arguments)
+    {
+        try
+        {
+            Map<?, ?> values = objectMapper.readValue(StringUtils.defaultString(arguments, "{}"), Map.class);
+            Object path = values.get("path");
+            if (path == null || !pageConfigService.isEnabled(String.valueOf(path)))
+            {
+                throw new ServiceException("目标页面未启用 AI 页面能力");
+            }
+        }
+        catch (ServiceException e)
+        {
+            throw e;
+        }
+        catch (Exception e)
+        {
+            throw new ServiceException("导航工具参数无效");
+        }
     }
 
     private AiConversation resolveConversation(AiChatTurnRequest request, Long userId)
