@@ -21,6 +21,36 @@ public class AiFrontendToolPolicy
                 "UI", null, "导航到当前登录用户有权访问的 RuoYi 页面；导航本身不授予任何后端业务权限",
                 objectSchema(Map.of("path", Map.of("type", "string", "description", "目标页面绝对路径")),
                         List.of("path"))));
+        allowlist.put("page_monitor_job_view", new ToolPolicy(
+                "READ", "monitor:job:query", "查看指定定时任务的详细配置",
+                objectSchema(Map.of("jobId", Map.of("type", "integer", "description", "任务ID")), List.of("jobId"))));
+        allowlist.put("page_monitor_job_change_status", new ToolPolicy(
+                "DANGEROUS_WRITE", "monitor:job:changeStatus", "启用或停用指定定时任务；会改变调度器实际运行状态",
+                objectSchema(Map.of(
+                        "jobId", Map.of("type", "integer", "description", "任务ID"),
+                        "status", Map.of("type", "string", "enum", List.of("0", "1"), "description", "0正常，1暂停")),
+                        List.of("jobId", "status"))));
+        allowlist.put("page_monitor_job_run_now", new ToolPolicy(
+                "DANGEROUS_WRITE", "monitor:job:changeStatus", "立即执行一次指定定时任务；该动作可能触发实际业务副作用",
+                objectSchema(Map.of(
+                        "jobId", Map.of("type", "integer", "description", "任务ID"),
+                        "jobGroup", Map.of("type", "string", "description", "任务组")),
+                        List.of("jobId", "jobGroup"))));
+        allowlist.put("page_monitor_logininfor_unlock", new ToolPolicy(
+                "WRITE", "monitor:logininfor:unlock", "解除指定用户的登录锁定状态",
+                objectSchema(Map.of("userName", Map.of("type", "string", "description", "登录账号")), List.of("userName"))));
+        allowlist.put("page_monitor_logininfor_clean", new ToolPolicy(
+                "DANGEROUS_WRITE", "monitor:logininfor:remove", "清空全部登录日志；该动作不可逆",
+                objectSchema(Map.of(), List.of())));
+        allowlist.put("page_monitor_online_force_logout", new ToolPolicy(
+                "DANGEROUS_WRITE", "monitor:online:forceLogout", "强制指定在线会话退出登录",
+                objectSchema(Map.of("tokenId", Map.of("type", "string", "description", "在线会话 Token ID")), List.of("tokenId"))));
+        allowlist.put("page_monitor_operlog_view", new ToolPolicy(
+                "READ", "monitor:operlog:query", "查看指定操作日志详情",
+                objectSchema(Map.of("operId", Map.of("type", "integer", "description", "操作日志ID")), List.of("operId"))));
+        allowlist.put("page_monitor_operlog_clean", new ToolPolicy(
+                "DANGEROUS_WRITE", "monitor:operlog:remove", "清空全部操作日志；该动作不可逆",
+                objectSchema(Map.of(), List.of())));
         allowlist.put("page_system_user_search", new ToolPolicy(
                 "READ", "system:user:list", "在当前用户管理页设置查询条件并查询用户",
                 objectSchema(Map.of(
