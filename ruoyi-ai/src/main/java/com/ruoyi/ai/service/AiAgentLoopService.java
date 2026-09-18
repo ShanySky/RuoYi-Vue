@@ -91,11 +91,10 @@ public class AiAgentLoopService
         {
             AiPendingToolCall pending = acceptToolResult(conversation, userId, request);
             run = runService.requireOwned(pending.getRunId(), userId);
-            if (!"WAITING_TOOL".equals(run.getStatus()))
+            if (!"RUNNING".equals(run.getStatus()))
             {
                 return AiChatTurnResponse.state(conversation.getConversationId(), run.getRunId(), run.getStatus());
             }
-            runService.resumeTool(run.getRunId());
             selection = new TurnSelection(pending.getModelId(), pending.getModelCode(), pending.getReasoningEffort());
         }
         else
@@ -274,14 +273,12 @@ public class AiAgentLoopService
         }
 
         String answer = StringUtils.defaultString(output.getText());
-        runService.complete(run.getRunId());
-        AiRun completed = runService.get(run.getRunId());
-        if (completed == null || !"COMPLETED".equals(completed.getStatus()))
+        AiMessage assistantMessage = buildMessage(conversation.getConversationId(), run.getRunId(), "ASSISTANT",
+                trimTo(answer, 20000), null, null, null, actualSelection);
+        if (!messageService.completeWithAssistant(assistantMessage))
         {
-            return runState(conversation, completed);
+            return runState(conversation, runService.get(run.getRunId()));
         }
-        insertMessage(conversation.getConversationId(), run.getRunId(), "ASSISTANT", trimTo(answer, 20000),
-                null, null, null, actualSelection);
         return AiChatTurnResponse.message(conversation.getConversationId(), run.getRunId(), answer);
     }
 
@@ -305,10 +302,10 @@ public class AiAgentLoopService
             validateNavigationTarget(modelCall.arguments());
         }
 
-        runService.waitingTool(run.getRunId());
         String runtimeCallId = "rtc_" + UUID.randomUUID().toString().replace("-", "");
-        insertMessage(conversation.getConversationId(), run.getRunId(), "ASSISTANT", trimTo(output.getText(), 12000),
-                runtimeCallId, modelCall.name(), trimTo(modelCall.arguments(), 20000), selection);
+        AiMessage toolCallMessage = buildMessage(conversation.getConversationId(), run.getRunId(), "ASSISTANT",
+                trimTo(output.getText(), 12000), runtimeCallId, modelCall.name(),
+                trimTo(modelCall.arguments(), 20000), selection);
 
         AiPendingToolCall pending = new AiPendingToolCall();
         pending.setCallId(runtimeCallId);
@@ -326,7 +323,10 @@ public class AiAgentLoopService
         pending.setPageVersion(request.getPageVersion());
         try
         {
-            pendingMapper.insert(pending);
+            if (!messageService.persistToolCall(toolCallMessage, pending))
+            {
+                return runState(conversation, runService.get(run.getRunId()));
+            }
         }
         catch (Exception e)
         {
@@ -402,11 +402,6 @@ public class AiAgentLoopService
         {
             throw new ServiceException("当前用户已无权完成此页面工具调用");
         }
-        if (pendingMapper.resolve(pending.getPendingId()) != 1)
-        {
-            throw new ServiceException("页面工具调用状态已变化，请重试");
-        }
-
         Map<String, Object> pageRuntime = new LinkedHashMap<>();
         pageRuntime.put("route", request.getRoute());
         pageRuntime.put("pageInstanceId", request.getPageInstanceId());
@@ -421,8 +416,12 @@ public class AiAgentLoopService
         String resultJson = trimTo(toJson(payload), MAX_TOOL_RESULT_CHARS);
         TurnSelection selection = new TurnSelection(pending.getModelId(), pending.getModelCode(),
                 pending.getReasoningEffort());
-        insertMessage(conversation.getConversationId(), pending.getRunId(), "TOOL", resultJson,
-                pending.getCallId(), pending.getToolName(), null, selection);
+        AiMessage toolResultMessage = buildMessage(conversation.getConversationId(), pending.getRunId(), "TOOL",
+                resultJson, pending.getCallId(), pending.getToolName(), null, selection);
+        if (!messageService.resolveToolResult(toolResultMessage, pending.getPendingId()))
+        {
+            throw new ServiceException("当前 Run 已停止或被新指令替代");
+        }
         return pending;
     }
 
@@ -600,6 +599,13 @@ public class AiAgentLoopService
     private void insertMessage(Long conversationId, Long runId, String role, String content, String toolCallId,
             String toolName, String toolArguments, TurnSelection selection)
     {
+        messageService.append(buildMessage(conversationId, runId, role, content, toolCallId, toolName, toolArguments,
+                selection));
+    }
+
+    private AiMessage buildMessage(Long conversationId, Long runId, String role, String content, String toolCallId,
+            String toolName, String toolArguments, TurnSelection selection)
+    {
         AiMessage message = new AiMessage();
         message.setConversationId(conversationId);
         message.setRole(role);
@@ -614,7 +620,7 @@ public class AiAgentLoopService
             message.setModelCode(selection.modelCode());
             message.setReasoningEffort(selection.reasoningEffort());
         }
-        messageService.append(message);
+        return message;
     }
 
     private AiChatTurnResponse runState(AiConversation conversation, AiRun run)
