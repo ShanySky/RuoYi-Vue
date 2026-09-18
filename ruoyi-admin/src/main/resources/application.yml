@@ -35,7 +35,10 @@ server:
 logging:
   level:
     com.ruoyi: debug
+    # AI 调用频率高时禁止默认 DEBUG，避免 Prompt/Tool 相关调试日志放大 stdout
+    com.ruoyi.ai: info
     org.springframework: warn
+    org.springframework.ai: warn
 
 # 用户配置
 user:
