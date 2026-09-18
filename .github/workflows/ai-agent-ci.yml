@@ -51,7 +51,10 @@ jobs:
           test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='ry-vue' AND table_name LIKE 'ai_%';")" -ge "10"
 
       - name: Build backend
-        run: mvn -B -DskipTests clean package
+        shell: bash
+        run: |
+          set -o pipefail
+          mvn -B -DskipTests clean package 2>&1 | tee /tmp/maven-build.log
 
       - name: Start mock OpenAI-compatible provider
         run: |
@@ -195,6 +198,7 @@ jobs:
         with:
           name: ai-backend-ci-logs
           path: |
+            /tmp/maven-build.log
             /tmp/ruoyi-backend.log
             /tmp/mock-openai.log
             /tmp/test-chat.json
