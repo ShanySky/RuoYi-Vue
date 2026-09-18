@@ -422,7 +422,7 @@ jobs:
           name: ai-agent-fullstack-e2e
           path: |
             frontend/test-results/
-            /tmp/ai-agent-e2e.log
+            /tmp/ai-agent-e2e.log\n            /tmp/acceptance-revisions.txt
             /tmp/ruoyi-backend.log
             /tmp/ruoyi-frontend.log
             /tmp/mock-openai.log
