@@ -1,5 +1,5 @@
 package com.ruoyi.ai.service;
-import java.lang.reflect.Method; import java.util.concurrent.*; import org.springframework.ai.chat.model.ChatResponse; import org.springframework.stereotype.Service; import org.springframework.transaction.annotation.Transactional; import jakarta.annotation.PreDestroy; import com.ruoyi.ai.domain.*; import com.ruoyi.ai.mapper.*; import com.ruoyi.common.exception.ServiceException;
+import java.util.concurrent.*; import org.springframework.ai.chat.metadata.Usage; import org.springframework.ai.chat.model.ChatResponse; import org.springframework.stereotype.Service; import org.springframework.transaction.annotation.Transactional; import jakarta.annotation.PreDestroy; import com.ruoyi.ai.domain.*; import com.ruoyi.ai.mapper.*; import com.ruoyi.common.exception.ServiceException;
 @Service
 public class AiRunService {
  private final AiRunMapper runs; private final AiConversationMapper conversations; private final AiPendingToolCallMapper pending; private final ConcurrentHashMap<Long,Future<?>> inFlight=new ConcurrentHashMap<>(); private final ExecutorService executor=Executors.newCachedThreadPool();
@@ -24,8 +24,8 @@ public class AiRunService {
   if(!runnable(runId)){f.cancel(true);inFlight.remove(runId,f);throw new InterruptedException("run cancelled before model call");}
   try{return f.get();}catch(CancellationException e){throw new InterruptedException("run cancelled");}finally{inFlight.remove(runId,f);}
  }
- public void recordUsage(Long runId,ChatResponse response){if(response==null||response.getMetadata()==null||response.getMetadata().getUsage()==null)return;Object u=response.getMetadata().getUsage();long input=read(u,"getPromptTokens","getInputTokens");long read=read(u,"getCacheReadInputTokens");long write=read(u,"getCacheWriteInputTokens");long total=read(u,"getTotalTokens");runs.updateUsage(runId,input,read,write,total);}
+ public void recordUsage(Long runId,ChatResponse response){if(response==null||response.getMetadata()==null||response.getMetadata().getUsage()==null)return;Usage u=response.getMetadata().getUsage();long input=value(u.getPromptTokens());long read=value(u.getCacheReadInputTokens());long write=value(u.getCacheWriteInputTokens());long total=value(u.getTotalTokens());runs.updateUsage(runId,input,read,write,total);}
  private String normalizeClientRunKey(String key){String value=key==null?"":key.trim();if(value.isEmpty())value=java.util.UUID.randomUUID().toString();if(value.length()>64)throw new ServiceException("clientRunKey 过长");return value;}
- private long read(Object target,String... names){for(String n:names)try{Method m=target.getClass().getMethod(n);Object v=m.invoke(target);if(v instanceof Number x)return x.longValue();}catch(Exception ignored){}return 0;}
+ private long value(Number n){return n==null?0:n.longValue();}
  @PreDestroy public void shutdown(){executor.shutdownNow();}
 }
