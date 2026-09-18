@@ -206,9 +206,9 @@ where not exists (select 1 from ai_prompt where prompt_type='SYSTEM');
 
 insert into ai_prompt(prompt_type, content, default_content, version_no, enabled, create_by, create_time)
 select 'COMPACTION',
-'请把较早的会话历史压缩成可继续工作的 Agent Checkpoint。必须保留：当前主题和最终目标；用户已确认决策；已完成工作和关键结果；当前进度；未完成任务和下一步；未解决问题；模型/页面/Agent 状态；已执行 Tool 与关键结果；已发生且不可逆的 WRITE；pending Tool/WRITE/确认状态；用户最新 Steering/纠偏；继续工作所需关键 ID、字段、配置、文件和接口；事实与暂定方案的区分；压缩后需要重新检查的事项。明确列出不要重复已经完成的工作。不要写普通聊天摘要。',
-'请把较早的会话历史压缩成可继续工作的 Agent Checkpoint。必须保留：当前主题和最终目标；用户已确认决策；已完成工作和关键结果；当前进度；未完成任务和下一步；未解决问题；模型/页面/Agent 状态；已执行 Tool 与关键结果；已发生且不可逆的 WRITE；pending Tool/WRITE/确认状态；用户最新 Steering/纠偏；继续工作所需关键 ID、字段、配置、文件和接口；事实与暂定方案的区分；压缩后需要重新检查的事项。明确列出不要重复已经完成的工作。不要写普通聊天摘要。',
-1, '0', 'system', sysdate()
+'请把较早的会话历史压缩成可继续工作的 Agent Checkpoint，而不是普通聊天摘要。严格按以下固定结构输出，并保留没有内容的栏目：\n## 任务主线\n- 当前主题：\n- 最终目标：\n## 用户决策与最新指令\n- 已确认决策：\n- 最新 Steering/纠偏：\n## 已完成工作与真实结果\n- 已完成工作：\n- 关键结果：\n- 已发生且不可逆的 WRITE：\n- 明确禁止重复的已完成事项：\n## 当前运行状态\n- 当前进度/正在做什么：\n- 模型/Reasoning：\n- 页面/路由/页面实例：\n- Agent/Run 状态：\n## Tool 与确认状态\n- 已执行 Tool 与关键结果：\n- pending Tool/WRITE/确认：\n- 已取消/未完成 Tool（不得当作已执行）：\n## 待办与下一步\n- 未完成任务：\n- 未解决问题：\n- 下一步：\n## 继续工作所需关键引用\n- ID/字段/配置/文件/接口：\n## 事实、暂定方案与复核项\n- 已验证事实：\n- 暂定方案：\n- 压缩后需要重新检查的事项：\n必须保持事实与暂定方案的区分；不得把未完成或已取消的 Tool/WRITE 写成成功；不得省略最新用户指令；明确列出不要重复已经完成的工作。',
+'请把较早的会话历史压缩成可继续工作的 Agent Checkpoint，而不是普通聊天摘要。严格按以下固定结构输出，并保留没有内容的栏目：\n## 任务主线\n- 当前主题：\n- 最终目标：\n## 用户决策与最新指令\n- 已确认决策：\n- 最新 Steering/纠偏：\n## 已完成工作与真实结果\n- 已完成工作：\n- 关键结果：\n- 已发生且不可逆的 WRITE：\n- 明确禁止重复的已完成事项：\n## 当前运行状态\n- 当前进度/正在做什么：\n- 模型/Reasoning：\n- 页面/路由/页面实例：\n- Agent/Run 状态：\n## Tool 与确认状态\n- 已执行 Tool 与关键结果：\n- pending Tool/WRITE/确认：\n- 已取消/未完成 Tool（不得当作已执行）：\n## 待办与下一步\n- 未完成任务：\n- 未解决问题：\n- 下一步：\n## 继续工作所需关键引用\n- ID/字段/配置/文件/接口：\n## 事实、暂定方案与复核项\n- 已验证事实：\n- 暂定方案：\n- 压缩后需要重新检查的事项：\n必须保持事实与暂定方案的区分；不得把未完成或已取消的 Tool/WRITE 写成成功；不得省略最新用户指令；明确列出不要重复已经完成的工作。',
+2, '0', 'system', sysdate()
 where not exists (select 1 from ai_prompt where prompt_type='COMPACTION');
 
 insert into ai_page_config(route, page_name, enabled, create_by, create_time)
