@@ -60,7 +60,7 @@ jobs:
             echo "FRONTEND_SHA=$(git -C frontend rev-parse HEAD)"
           } | tee /tmp/acceptance-revisions.txt
 
-      # Final I3 browser suite includes the default 64K/75% compaction threshold boundary.
+      # Final I3 browser suite covers the default 64K/75% threshold and representative cross-module Page Capability smoke.
       - name: Validate browser acceptance script syntax
         working-directory: frontend
         run: node --check tests/ai-agent-e2e.mjs
