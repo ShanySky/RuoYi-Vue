@@ -14,6 +14,7 @@ public class AiModel extends BaseEntity
     private Long providerId;
     private String modelCode;
     private String displayName;
+    private String selected;
     private String enabled;
     private String defaultModel;
     private String toolCapability;
@@ -60,6 +61,16 @@ public class AiModel extends BaseEntity
     public void setDisplayName(String displayName)
     {
         this.displayName = displayName;
+    }
+
+    public String getSelected()
+    {
+        return selected;
+    }
+
+    public void setSelected(String selected)
+    {
+        this.selected = selected;
     }
 
     public String getEnabled()
