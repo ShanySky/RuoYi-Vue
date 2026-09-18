@@ -7,6 +7,7 @@ public class AiChatTurnRequest
 {
     private Long conversationId;
     private Long modelId;
+    private String reasoningEffort;
     private String userMessage;
     private AiToolResultRequest toolResult;
     private String route;
@@ -17,6 +18,8 @@ public class AiChatTurnRequest
     public void setConversationId(Long conversationId) { this.conversationId = conversationId; }
     public Long getModelId() { return modelId; }
     public void setModelId(Long modelId) { this.modelId = modelId; }
+    public String getReasoningEffort() { return reasoningEffort; }
+    public void setReasoningEffort(String reasoningEffort) { this.reasoningEffort = reasoningEffort; }
     public String getUserMessage() { return userMessage; }
     public void setUserMessage(String userMessage) { this.userMessage = userMessage; }
     public AiToolResultRequest getToolResult() { return toolResult; }
