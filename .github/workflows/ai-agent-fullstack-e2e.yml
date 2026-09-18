@@ -197,6 +197,14 @@ jobs:
                           'content': 'WRITE_CANCELLED_BY_STEERING' if ('rows' in tool_history and 'ry' in tool_history)
                               else 'STEERING_HISTORY_MISSING'
                       }
+                  elif latest_user.startswith('UI_COMPACT_'):
+                      message = {
+                          'role': 'assistant',
+                          'content': 'AI_OK:%s:%s' % (
+                              body.get('model'),
+                              body.get('reasoning_effort') or 'default'
+                          )
+                      }
                   elif 'CROSS_PAGE_ROLE_ASSIGN' in latest_user:
                       tool_results = [msg for msg in messages if msg.get('role') == 'tool']
                       step = len(tool_results)
