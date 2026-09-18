@@ -154,6 +154,9 @@ public class AiFrontendToolPolicy
         allowlist.put("page_system_dept_sort_submit", new ToolPolicy(
                 "WRITE", "system:dept:edit", "保存部门显示排序",
                 objectSchema(Map.of("items", Map.of("type", "array", "items", Map.of("type", "object"))), List.of("items"))));
+        allowlist.put("page_system_menu_sort_submit", new ToolPolicy(
+                "WRITE", "system:menu:edit", "保存菜单显示排序",
+                objectSchema(Map.of("items", Map.of("type", "array", "items", Map.of("type", "object"))), List.of("items"))));
         allowlist.put("page_system_notice_read_users", new ToolPolicy(
                 "READ", "system:notice:list", "打开公告已读用户并返回当前已读用户列表",
                 objectSchema(Map.of("noticeId", Map.of("type", "integer")), List.of("noticeId"))));
