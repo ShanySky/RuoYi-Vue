@@ -140,13 +140,24 @@ jobs:
                   messages = body.get('messages') or []
                   tools = body.get('tools') or []
                   names = [((tool.get('function') or {}).get('name')) for tool in tools]
+                  latest_user = next((msg.get('content') or '' for msg in reversed(messages) if msg.get('role') == 'user'), '')
                   finish = 'stop'
 
                   if 'ai_echo_test' in names:
                       message = tool_call('ai_echo_test', {'value': 'AI_OK'})
                       finish = 'tool_calls'
+                  elif 'SLOW_STOP_TEST' in latest_user:
+                      time.sleep(4)
+                      message = {'role': 'assistant', 'content': 'SLOW_STOP_DONE'}
+                  elif 'SLOW_ESC_TEST' in latest_user:
+                      time.sleep(4)
+                      message = {'role': 'assistant', 'content': 'SLOW_ESC_DONE'}
+                  elif 'STEER_OLD' in latest_user:
+                      time.sleep(4)
+                      message = {'role': 'assistant', 'content': 'STEER_OLD_DONE'}
+                  elif 'STEER_NEW' in latest_user:
+                      message = {'role': 'assistant', 'content': 'STEER_NEW_OK'}
                   elif any(name and name.startswith('page_system_user_') for name in names):
-                      latest_user = next((msg.get('content') or '' for msg in reversed(messages) if msg.get('role') == 'user'), '')
                       wants_login_name_change = (
                           any(word in latest_user for word in ['用户名称', '用户名', '登录账号', 'userName'])
                           and any(word in latest_user for word in ['修改', '改成', '改为', '换成'])
