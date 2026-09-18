@@ -1,5 +1,6 @@
 name: AI Agent Real GPT Acceptance
 
+# Final phase-three probe: this workflow never stores real provider credentials in the repository.
 on:
   push:
     branches:
