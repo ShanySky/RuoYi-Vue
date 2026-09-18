@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import com.ruoyi.ai.domain.AiModel;
 import com.ruoyi.ai.dto.AiModelSelectionRequest;
+import com.ruoyi.ai.dto.AiModelRuntimeSettingsRequest;
 import com.ruoyi.ai.dto.AiModelStatusRequest;
 import com.ruoyi.ai.dto.AiProviderSaveRequest;
 import com.ruoyi.ai.dto.AiReasoningEffortRequest;
@@ -116,6 +117,16 @@ public class AiConfigController
     public AjaxResult setDefaultReasoning(@PathVariable Long modelId, @RequestBody AiReasoningEffortRequest request)
     {
         configService.setDefaultReasoningEffort(modelId, request == null ? null : request.getReasoningEffort());
+        return AjaxResult.success();
+    }
+
+    @PreAuthorize("@ss.hasPermi('ai:config:edit')")
+    @PutMapping("/models/{modelId}/runtime-settings")
+    public AjaxResult setRuntimeSettings(@PathVariable Long modelId, @RequestBody AiModelRuntimeSettingsRequest request)
+    {
+        configService.setModelRuntimeSettings(modelId, request == null ? null : request.getContextWindowTokens(),
+                request == null ? null : request.getAutoCompaction(),
+                request == null ? null : request.getCompactionThresholdPercent());
         return AjaxResult.success();
     }
 
