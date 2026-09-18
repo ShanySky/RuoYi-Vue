@@ -1,5 +1,6 @@
 package com.ruoyi.ai.service;
 
+import java.util.ArrayList;
 import java.util.List;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
@@ -58,30 +59,36 @@ public class AiModelCapabilityService
 
     public String testReasoning(Long modelId)
     {
-        AiAgentModelFactory.ModelRuntime runtime = modelFactory.create(modelId, List.of(), "low");
-        try
+        List<String> supported = new ArrayList<>();
+        String lastError = null;
+        for (String effort : List.of("minimal", "low", "medium", "high", "xhigh"))
         {
-            ChatResponse response = runtime.chatModel().call(new Prompt(
-                    "Reply with exactly AI_OK.", runtime.options()));
-            if (response == null || response.getResult() == null || response.getResult().getOutput() == null)
+            try
             {
-                throw new ServiceException("思考能力测试未返回有效响应");
+                AiAgentModelFactory.ModelRuntime runtime = modelFactory.create(modelId, List.of(), effort);
+                ChatResponse response = runtime.chatModel().call(new Prompt("Reply with exactly AI_OK.", runtime.options()));
+                if (response != null && response.getResult() != null && response.getResult().getOutput() != null)
+                {
+                    supported.add(effort);
+                }
+            }
+            catch (Exception e)
+            {
+                lastError = safeMessage(e);
             }
         }
-        catch (ServiceException e)
+
+        if (supported.isEmpty())
         {
-            throw e;
-        }
-        catch (Exception e)
-        {
-            throw new ServiceException("思考能力测试失败：" + safeMessage(e));
+            throw new ServiceException("思考能力测试未发现可用档位" + (lastError == null ? "" : "：" + lastError));
         }
 
-        AiModel model = runtime.model();
+        AiModel model = modelFactory.create(modelId, List.of()).model();
         model.setReasoningCapability(AiConfigService.CAPABILITY_SUPPORTED);
+        model.setReasoningEfforts(String.join(",", supported));
         model.setUpdateBy(SecurityUtils.getUsername());
         modelMapper.updateReasoningCapability(model);
-        return model.getReasoningCapability();
+        return model.getReasoningEfforts();
     }
 
     private String safeMessage(Exception e)
