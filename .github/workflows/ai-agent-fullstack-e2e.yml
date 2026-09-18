@@ -71,7 +71,7 @@ jobs:
           mysql -h127.0.0.1 -uroot -ppassword ry-vue < backend/sql/ry_20260417.sql
           mysql -h127.0.0.1 -uroot -ppassword ry-vue < backend/sql/quartz.sql
           mysql -h127.0.0.1 -uroot -ppassword ry-vue < backend/sql/ai_20260918.sql
-          mysql -h127.0.0.1 -uroot -ppassword -e "update sys_config set config_value='false' where config_key='sys.account.captchaEnabled'" ry-vue
+          mysql -h127.0.0.1 -uroot -ppassword -e "update sys_config set config_value='false' where config_key='sys.account.captchaEnabled'; insert ignore into sys_role_menu(role_id,menu_id) values(2,118),(2,1061); insert into ai_conversation(user_id,model_id,reasoning_effort,title,route,status,create_time,update_time) values(1,null,null,'H_EXPIRED_CLEANUP','/index','ACTIVE',date_sub(sysdate(),interval 120 day),date_sub(sysdate(),interval 120 day));" ry-vue
 
       - name: Build backend
         working-directory: backend
@@ -141,9 +141,20 @@ jobs:
                   tools = body.get('tools') or []
                   names = [((tool.get('function') or {}).get('name')) for tool in tools]
                   latest_user = next((msg.get('content') or '' for msg in reversed(messages) if msg.get('role') == 'user'), '')
+                  system_text = '\n'.join(str(msg.get('content') or '') for msg in messages if msg.get('role') == 'system')
                   finish = 'stop'
 
-                  if 'ai_echo_test' in names:
+                  if 'H_COMPACTION_PROMPT_MARKER' in system_text:
+                      message = {'role': 'assistant', 'content': 'H_COMPACTION_APPLIED'}
+                  elif 'H_SYSTEM_PROMPT_MARKER' in system_text and 'H_PROMPT_APPLY' in latest_user:
+                      message = {'role': 'assistant', 'content': 'H_SYSTEM_PROMPT_APPLIED'}
+                  elif 'H_PAGE_DISABLED_TOOL' in latest_user:
+                      message = tool_call('page_system_user_search', {'userName': 'ry'})
+                      finish = 'tool_calls'
+                  elif 'H_SECURITY_PROMPT_TEST' in latest_user:
+                      message = tool_call('page_system_user_edit_submit', {})
+                      finish = 'tool_calls'
+                  elif 'ai_echo_test' in names:
                       message = tool_call('ai_echo_test', {'value': 'AI_OK'})
                       finish = 'tool_calls'
                   elif 'SLOW_STOP_TEST' in latest_user:
@@ -376,6 +387,17 @@ jobs:
           test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select history_entry_visible from ai_user_preference where user_id=1" ry-vue)" = "0"
           test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select auto_restore_last_conversation from ai_user_preference where user_id=1" ry-vue)" = "1"
           test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select send_shortcut from ai_user_preference where user_id=1" ry-vue)" = "ctrl-enter"
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_conversation where title='H_EXPIRED_CLEANUP'" ry-vue)" = "0"
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select config_value from sys_config where config_key='ai.conversation.retentionDays'" ry-vue)" = "90"
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select config_value from sys_config where config_key='ai.conversation.userArchiveEnabled'" ry-vue)" = "true"
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select config_value from sys_config where config_key='ai.conversation.userDeleteEnabled'" ry-vue)" = "false"
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select enabled from ai_page_config where route='/system/user'" ry-vue)" = "0"
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_prompt where content=default_content and enabled='0'" ry-vue)" = "2"
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_checkpoint where summary like '%H_COMPACTION_APPLIED%'" ry-vue)" -ge 1
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_run r join ai_checkpoint c on c.run_id=r.run_id where c.summary like '%H_COMPACTION_APPLIED%' and r.compaction_prompt_version > 2" ry-vue)" -ge 1
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from sys_oper_log where title in ('AI Prompt 配置','AI Prompt 恢复默认','AI 页面能力','AI 会话策略','AI 会话过期清理','AI 会话审计查看')" ry-vue)" -ge 6
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from sys_role_menu where role_id=2 and menu_id in (118,1061)" ry-vue)" = "2"
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from sys_role_menu where role_id=2 and menu_id=2107" ry-vue)" = "0"
 
           sleep 2
           test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from sys_oper_log where title='AI 服务配置' and oper_param like '%e2e-provider-placeholder%'" ry-vue)" = "0"
