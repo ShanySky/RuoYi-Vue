@@ -97,6 +97,7 @@ public class AiConfigController
     }
 
     @PreAuthorize("@ss.hasPermi('ai:config:edit')")
+    @Log(title = "AI 模型启停", businessType = BusinessType.UPDATE)
     @PutMapping("/models/{modelId}/enabled")
     public AjaxResult setEnabled(@PathVariable Long modelId, @Validated @RequestBody AiModelStatusRequest request)
     {
@@ -105,6 +106,7 @@ public class AiConfigController
     }
 
     @PreAuthorize("@ss.hasPermi('ai:config:edit')")
+    @Log(title = "AI 系统默认模型", businessType = BusinessType.UPDATE)
     @PutMapping("/models/{modelId}/default")
     public AjaxResult setDefault(@PathVariable Long modelId)
     {
@@ -113,6 +115,7 @@ public class AiConfigController
     }
 
     @PreAuthorize("@ss.hasPermi('ai:config:edit')")
+    @Log(title = "AI 模型默认思考档位", businessType = BusinessType.UPDATE)
     @PutMapping("/models/{modelId}/default-reasoning")
     public AjaxResult setDefaultReasoning(@PathVariable Long modelId, @RequestBody AiReasoningEffortRequest request)
     {
@@ -121,6 +124,7 @@ public class AiConfigController
     }
 
     @PreAuthorize("@ss.hasPermi('ai:config:edit')")
+    @Log(title = "AI 模型运行参数", businessType = BusinessType.UPDATE)
     @PutMapping("/models/{modelId}/runtime-settings")
     public AjaxResult setRuntimeSettings(@PathVariable Long modelId, @RequestBody AiModelRuntimeSettingsRequest request)
     {
@@ -131,6 +135,7 @@ public class AiConfigController
     }
 
     @PreAuthorize("@ss.hasPermi('ai:config:edit')")
+    @Log(title = "AI 模型能力检测", businessType = BusinessType.UPDATE)
     @PostMapping("/models/{modelId}/detect-capabilities")
     public AjaxResult detectCapabilities(@PathVariable Long modelId)
     {
