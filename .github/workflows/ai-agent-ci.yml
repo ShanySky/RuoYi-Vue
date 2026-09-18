@@ -201,6 +201,20 @@ jobs:
           test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_pending_tool_call where conversation_id=$CONV_ID and status='RESOLVED'" ry-vue)" = "2"
           mysql -h127.0.0.1 -uroot -ppassword -Nse "select concat((select count(*) from ai_conversation),' ',(select count(*) from ai_message),' ',(select count(*) from ai_pending_tool_call where status='RESOLVED'))" ry-vue
 
+          # Force a low context budget so automatic compaction can be verified quickly.
+          curl -fsS -H "$AUTH" -H 'Content-Type: application/json' -X PUT             -d '{"contextWindowTokens":8192,"autoCompaction":true,"compactionThresholdPercent":50}'             "http://127.0.0.1:8080/ai/config/models/$MODEL_ID/runtime-settings"             | python3 -c 'import json,sys; assert json.load(sys.stdin)["code"]==200'
+
+          CREATED=$(curl -fsS -H "$AUTH" -H 'Content-Type: application/json' -X POST             -d "{\"modelId\":$MODEL_ID,\"route\":\"/system/user\"}"             http://127.0.0.1:8080/ai/chat/conversations)
+          LONG_CONV_ID=$(printf '%s' "$CREATED" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["code"]==200; print(d["data"]["conversationId"])')
+
+          python3 - "$LONG_CONV_ID" "$MODEL_ID" <<'PY' >/tmp/long-turn1.json
+          import json,sys
+          cid=int(sys.argv[1]); mid=int(sys.argv[2])
+          print(json.dumps({"conversationId":cid,"modelId":mid,"userMessage":"LONG_CONTEXT_A:"+("A"*11800),"route":"/system/user","pageContext":{"pageName":"用户管理"}}, ensure_ascii=False))
+          PY
+          LONG1=$(curl -fsS -H "$AUTH" -H 'Content-Type: application/json' --data-binary @/tmp/long-turn1.json http://127.0.0.1:8080/ai/chat/turn)
+          printf '%s' "$LONG1" | python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["type"]=="MESSAGE"; assert d["message"]=="AI_OK"'
+
       - name: Upload diagnostic logs
         if: always()
         uses: actions/upload-artifact@v4
