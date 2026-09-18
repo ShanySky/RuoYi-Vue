@@ -176,8 +176,10 @@ public class AiAgentLoopService
 
         AiPrompt systemPrompt = promptService.require(AiPromptService.SYSTEM);
         AiModel selectedModel = configService.requireModel(selection.modelId());
+        String runtimeOverhead = currentRuntimeContext(request, approvedTools) + "\n"
+                + trimTo(toJson(request.getFrontendTools() == null ? List.of() : request.getFrontendTools()), MAX_PAGE_CONTEXT_CHARS);
         AiCheckpoint checkpoint = contextService.maybeCompact(conversation, run, selectedModel,
-                selection.reasoningEffort());
+                selection.reasoningEffort(), runtimeOverhead);
 
         String cacheKey = "ruoyi:conv:" + conversation.getConversationId() + ":system:" + systemPrompt.getVersionNo();
         AiAgentModelFactory.ModelRuntime runtime = modelFactory.create(selection.modelId(), callbacks,
