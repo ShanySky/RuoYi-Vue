@@ -12,6 +12,7 @@ public interface AiModelMapper
 {
     String SELECT_FIELDS = "select model_id as modelId, provider_id as providerId, model_code as modelCode, "
             + "display_name as displayName, enabled, default_model as defaultModel, tool_capability as toolCapability, "
+            + "reasoning_capability as reasoningCapability, default_reasoning_effort as defaultReasoningEffort, "
             + "last_sync_time as lastSyncTime, create_by as createBy, create_time as createTime, update_by as updateBy, "
             + "update_time as updateTime, remark ";
 
@@ -27,8 +28,8 @@ public interface AiModelMapper
     @Select(SELECT_FIELDS + "from ai_model where provider_id=#{providerId} and model_code=#{modelCode} limit 1")
     AiModel selectByProviderAndCode(@Param("providerId") Long providerId, @Param("modelCode") String modelCode);
 
-    @Insert("insert into ai_model(provider_id, model_code, display_name, enabled, default_model, tool_capability, last_sync_time, create_by, create_time, remark) "
-            + "values(#{providerId}, #{modelCode}, #{displayName}, #{enabled}, #{defaultModel}, #{toolCapability}, #{lastSyncTime}, #{createBy}, sysdate(), #{remark})")
+    @Insert("insert into ai_model(provider_id, model_code, display_name, enabled, default_model, tool_capability, reasoning_capability, default_reasoning_effort, last_sync_time, create_by, create_time, remark) "
+            + "values(#{providerId}, #{modelCode}, #{displayName}, #{enabled}, #{defaultModel}, #{toolCapability}, #{reasoningCapability}, #{defaultReasoningEffort}, #{lastSyncTime}, #{createBy}, sysdate(), #{remark})")
     @Options(useGeneratedKeys = true, keyProperty = "modelId")
     int insert(AiModel model);
 
@@ -46,4 +47,13 @@ public interface AiModelMapper
 
     @Update("update ai_model set tool_capability=#{toolCapability}, update_by=#{updateBy}, update_time=sysdate() where model_id=#{modelId}")
     int updateToolCapability(AiModel model);
+
+    @Update("update ai_model set reasoning_capability=#{reasoningCapability}, update_by=#{updateBy}, update_time=sysdate() where model_id=#{modelId}")
+    int updateReasoningCapability(AiModel model);
+
+    @Update("update ai_model set default_reasoning_effort=#{defaultReasoningEffort}, update_by=#{updateBy}, update_time=sysdate() where model_id=#{modelId}")
+    int updateDefaultReasoningEffort(AiModel model);
+
+    @Select(SELECT_FIELDS + "from ai_model where enabled='0' and default_model='0' order by model_id limit 1")
+    AiModel selectDefaultEnabled();
 }
