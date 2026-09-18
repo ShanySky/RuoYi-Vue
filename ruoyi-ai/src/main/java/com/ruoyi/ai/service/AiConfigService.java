@@ -2,6 +2,7 @@ package com.ruoyi.ai.service;
 
 import java.util.Date;
 import java.util.List;
+import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.ruoyi.ai.domain.AiModel;
@@ -19,6 +20,9 @@ public class AiConfigService
 {
     public static final String PROVIDER_TYPE = "OPENAI_COMPATIBLE";
     public static final String CAPABILITY_UNKNOWN = "UNKNOWN";
+    public static final String CAPABILITY_SUPPORTED = "SUPPORTED";
+    public static final String CAPABILITY_UNSUPPORTED = "UNSUPPORTED";
+    private static final Set<String> REASONING_EFFORTS = Set.of("minimal", "low", "medium", "high", "xhigh");
 
     private final AiProviderMapper providerMapper;
     private final AiModelMapper modelMapper;
@@ -123,6 +127,8 @@ public class AiConfigService
                 model.setEnabled("1");
                 model.setDefaultModel("1");
                 model.setToolCapability(CAPABILITY_UNKNOWN);
+                model.setReasoningCapability(CAPABILITY_UNKNOWN);
+                model.setDefaultReasoningEffort(null);
                 model.setLastSyncTime(now);
                 model.setCreateBy(username);
                 modelMapper.insert(model);
@@ -164,6 +170,11 @@ public class AiConfigService
         }
     }
 
+    public AiModel getDefaultEnabledModel()
+    {
+        return modelMapper.selectDefaultEnabled();
+    }
+
     public void setModelEnabled(Long modelId, boolean enabled)
     {
         AiModel model = requireModel(modelId);
@@ -179,6 +190,48 @@ public class AiConfigService
         String username = SecurityUtils.getUsername();
         modelMapper.clearDefault(model.getProviderId(), username);
         modelMapper.setDefault(modelId, username);
+    }
+
+    public void setDefaultReasoningEffort(Long modelId, String reasoningEffort)
+    {
+        AiModel model = requireModel(modelId);
+        String normalized = normalizeReasoningEffort(reasoningEffort);
+        if (normalized != null && !CAPABILITY_SUPPORTED.equals(model.getReasoningCapability()))
+        {
+            throw new ServiceException("该模型尚未确认支持思考档位，请先进行思考能力测试或使用 Provider 默认");
+        }
+        model.setDefaultReasoningEffort(normalized);
+        model.setUpdateBy(SecurityUtils.getUsername());
+        modelMapper.updateDefaultReasoningEffort(model);
+    }
+
+    public String resolveReasoningEffort(AiModel model, String requested)
+    {
+        String normalized = normalizeReasoningEffort(requested);
+        if (normalized == null)
+        {
+            normalized = normalizeReasoningEffort(model.getDefaultReasoningEffort());
+        }
+        if (normalized != null && !CAPABILITY_SUPPORTED.equals(model.getReasoningCapability()))
+        {
+            throw new ServiceException("所选模型尚未确认支持思考档位，请使用 Provider 默认或先测试能力");
+        }
+        return normalized;
+    }
+
+    public String normalizeReasoningEffort(String reasoningEffort)
+    {
+        String value = StringUtils.trim(reasoningEffort);
+        if (StringUtils.isEmpty(value) || "default".equalsIgnoreCase(value) || "auto".equalsIgnoreCase(value))
+        {
+            return null;
+        }
+        value = value.toLowerCase();
+        if (!REASONING_EFFORTS.contains(value))
+        {
+            throw new ServiceException("不支持的思考档位：" + value);
+        }
+        return value;
     }
 
     public String testChat(Long modelId)
