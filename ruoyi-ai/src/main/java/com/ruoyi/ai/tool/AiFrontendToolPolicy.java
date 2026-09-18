@@ -26,7 +26,11 @@ public class AiFrontendToolPolicy
                 objectSchema(Map.of(
                         "userName", Map.of("type", "string", "description", "用户账号关键字"),
                         "phonenumber", Map.of("type", "string", "description", "手机号码"),
-                        "status", Map.of("type", "string", "enum", List.of("0", "1"), "description", "0正常，1停用")),
+                        "status", Map.of("type", "string", "enum", List.of("0", "1"), "description", "0正常，1停用"),
+                        "deptId", Map.of("type", "integer", "description", "部门ID"),
+                        "dateRange", Map.of("type", "array", "items", Map.of("type", "string"), "description", "创建时间范围"),
+                        "pageNum", Map.of("type", "integer", "description", "页码"),
+                        "pageSize", Map.of("type", "integer", "description", "每页数量")),
                         List.of())));
         allowlist.put("page_system_user_edit_open", new ToolPolicy(
                 "UI", "system:user:edit", "在当前用户管理页打开指定 userId 的用户编辑弹窗",
@@ -35,10 +39,13 @@ public class AiFrontendToolPolicy
                 "UI", "system:user:edit", "修改当前已打开用户编辑表单的安全字段但不保存；仅支持用户昵称 nickName 等安全字段，不支持修改登录账号 userName",
                 objectSchema(Map.of(
                         "nickName", Map.of("type", "string", "description", "用户昵称"),
+                        "deptId", Map.of("type", "integer", "description", "归属部门ID"),
                         "phonenumber", Map.of("type", "string", "description", "手机号码"),
                         "email", Map.of("type", "string", "description", "邮箱"),
                         "sex", Map.of("type", "string", "enum", List.of("0", "1", "2"), "description", "性别"),
                         "status", Map.of("type", "string", "enum", List.of("0", "1"), "description", "状态"),
+                        "postIds", Map.of("type", "array", "items", Map.of("type", "integer"), "description", "岗位ID列表"),
+                        "roleIds", Map.of("type", "array", "items", Map.of("type", "integer"), "description", "角色ID列表"),
                         "remark", Map.of("type", "string", "description", "备注")),
                         List.of())));
         allowlist.put("page_system_user_edit_submit", new ToolPolicy(
