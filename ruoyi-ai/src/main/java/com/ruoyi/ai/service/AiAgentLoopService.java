@@ -47,6 +47,7 @@ public class AiAgentLoopService
 
     private final AiConversationMapper conversationMapper;
     private final AiMessageMapper messageMapper;
+    private final AiMessageService messageService;
     private final AiPendingToolCallMapper pendingMapper;
     private final AiFrontendToolPolicy toolPolicy;
     private final AiAgentModelFactory modelFactory;
@@ -59,12 +60,13 @@ public class AiAgentLoopService
     private final ObjectMapper objectMapper;
 
     public AiAgentLoopService(AiConversationMapper conversationMapper, AiMessageMapper messageMapper,
-            AiPendingToolCallMapper pendingMapper, AiFrontendToolPolicy toolPolicy, AiAgentModelFactory modelFactory,
+            AiMessageService messageService, AiPendingToolCallMapper pendingMapper, AiFrontendToolPolicy toolPolicy, AiAgentModelFactory modelFactory,
             AiConfigService configService, AiPreferenceService preferenceService, AiPromptService promptService,
             AiRunService runService, AiContextService contextService, AiPageConfigService pageConfigService, ObjectMapper objectMapper)
     {
         this.conversationMapper = conversationMapper;
         this.messageMapper = messageMapper;
+        this.messageService = messageService;
         this.pendingMapper = pendingMapper;
         this.toolPolicy = toolPolicy;
         this.modelFactory = modelFactory;
@@ -102,7 +104,8 @@ public class AiAgentLoopService
             AiPrompt systemPrompt = promptService.require(AiPromptService.SYSTEM);
             AiPrompt compactionPrompt = promptService.require(AiPromptService.COMPACTION);
             run = runService.start(conversation, request.getClientRunKey(), selection.modelId(), selection.modelCode(),
-                    selection.reasoningEffort(), systemPrompt.getVersionNo(), compactionPrompt.getVersionNo());
+                    selection.reasoningEffort(), systemPrompt.getVersionNo(), compactionPrompt.getVersionNo(),
+                    trimTo(request.getUserMessage(), 12000));
 
             conversationMapper.updateSelection(conversation.getConversationId(), userId, selection.modelId(),
                     selection.reasoningEffort());
@@ -117,8 +120,6 @@ public class AiAgentLoopService
                     conversation.setTitle(initialTitle);
                 }
             }
-            insertMessage(conversation.getConversationId(), run.getRunId(), "USER",
-                    trimTo(request.getUserMessage(), 12000), null, null, null, selection);
         }
 
         conversationMapper.touch(conversation.getConversationId(), userId, trimTo(request.getRoute(), 255));
@@ -601,7 +602,6 @@ public class AiAgentLoopService
     {
         AiMessage message = new AiMessage();
         message.setConversationId(conversationId);
-        message.setSequenceNo(messageMapper.nextSequence(conversationId));
         message.setRole(role);
         message.setContent(content);
         message.setToolCallId(toolCallId);
@@ -614,7 +614,7 @@ public class AiAgentLoopService
             message.setModelCode(selection.modelCode());
             message.setReasoningEffort(selection.reasoningEffort());
         }
-        messageMapper.insert(message);
+        messageService.append(message);
     }
 
     private AiChatTurnResponse runState(AiConversation conversation, AiRun run)
