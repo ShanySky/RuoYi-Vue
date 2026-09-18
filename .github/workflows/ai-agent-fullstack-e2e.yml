@@ -414,6 +414,7 @@ jobs:
           test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_run where status='CANCELLED' and cancel_reason='DOUBLE_ESC'" ry-vue)" -ge 1
           test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_run where status='SUPERSEDED' and cancel_reason='STEERING'" ry-vue)" -ge 1
           test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_run where status='COMPACTING'" ry-vue)" = "0"
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_model where context_window_tokens<>65536 or auto_compaction<>'0' or compaction_threshold_percent<>75" ry-vue)" = "0"
           test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_message where role='ASSISTANT' and content in ('SLOW_STOP_DONE','SLOW_ESC_DONE','STEER_OLD_DONE')" ry-vue)" = "0"
           test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_message where role='ASSISTANT' and content='STEER_NEW_OK'" ry-vue)" -ge 1
           test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select chat_font_size from ai_user_preference where user_id=1" ry-vue)" = "standard"
