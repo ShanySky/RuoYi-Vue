@@ -279,6 +279,11 @@ public class AiConfigService
                 modelMapper.setDefault(next.getModelId(), SecurityUtils.getUsername());
             }
         }
+        else if (enabled && modelMapper.selectDefaultEnabled() == null)
+        {
+            modelMapper.clearDefault(model.getProviderId(), SecurityUtils.getUsername());
+            modelMapper.setDefault(model.getModelId(), SecurityUtils.getUsername());
+        }
     }
 
     @Transactional
