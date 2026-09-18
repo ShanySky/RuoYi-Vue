@@ -223,7 +223,9 @@ where not exists (select 1 from ai_prompt where prompt_type='COMPACTION');
 insert into ai_page_config(route,page_name,enabled,create_by,create_time) values
 ('/system/user','用户管理','0','system',sysdate()),('/system/user-auth/role/*','分配角色','0','system',sysdate()),('/system/role','角色管理','0','system',sysdate()),('/system/menu','菜单管理','0','system',sysdate()),('/system/dept','部门管理','0','system',sysdate()),('/system/post','岗位管理','0','system',sysdate()),('/system/dict','字典类型','0','system',sysdate()),('/system/notice','通知公告','0','system',sysdate()),('/monitor/online','在线用户','0','system',sysdate()),('/monitor/job','定时任务','0','system',sysdate()),('/monitor/logininfor','登录日志','0','system',sysdate()),('/monitor/operlog','操作日志','0','system',sysdate()),('/monitor/cache','缓存监控','0','system',sysdate()),('/monitor/server','服务监控','0','system',sysdate()),
 ('/system/role-auth/user/*','角色分配用户','0','system',sysdate()),
-('/system/user/profile','个人中心','0','system',sysdate()),
+('/system/dict-data/index/*','字典数据','0','system',sysdate()),
+('/monitor/job-log/index/*','调度日志','0','system',sysdate()),
+('/user/profile','个人中心','0','system',sysdate()),
 ('/tool/gen','代码生成','0','system',sysdate()),
 ('/tool/gen-edit/index/*','修改生成配置','0','system',sysdate()),
 ('/tool/build','表单构建','0','system',sysdate()),
