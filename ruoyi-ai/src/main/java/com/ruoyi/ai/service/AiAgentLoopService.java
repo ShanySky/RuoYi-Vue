@@ -19,6 +19,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ruoyi.ai.domain.AiConversation;
 import com.ruoyi.ai.domain.AiMessage;
+import com.ruoyi.ai.domain.AiModel;
 import com.ruoyi.ai.domain.AiPendingToolCall;
 import com.ruoyi.ai.dto.AiChatTurnRequest;
 import com.ruoyi.ai.dto.AiChatTurnResponse;
@@ -67,21 +68,61 @@ public class AiAgentLoopService
         validateTurnRequest(request);
         Long userId = SecurityUtils.getUserId();
         AiConversation conversation = resolveConversation(request, userId);
+        TurnSelection selection;
 
         if (request.getToolResult() != null)
         {
-            acceptToolResult(conversation, userId, request.getToolResult());
+            AiPendingToolCall pending = acceptToolResult(conversation, userId, request.getToolResult());
+            selection = new TurnSelection(pending.getModelId(), pending.getModelCode(), pending.getReasoningEffort());
         }
         else
         {
-            insertMessage(conversation.getConversationId(), "USER", trimTo(request.getUserMessage(), 12000), null, null, null);
+            selection = resolveUserSelection(request, conversation);
+            conversationMapper.updateSelection(conversation.getConversationId(), userId, selection.modelId(),
+                    selection.reasoningEffort());
+            conversation.setModelId(selection.modelId());
+            conversation.setReasoningEffort(selection.reasoningEffort());
+            insertMessage(conversation.getConversationId(), "USER", trimTo(request.getUserMessage(), 12000),
+                    null, null, null, selection);
         }
 
         conversationMapper.touch(conversation.getConversationId(), userId, trimTo(request.getRoute(), 255));
-        return callModel(conversation, request);
+        return callModel(conversation, request, selection);
     }
 
-    private AiChatTurnResponse callModel(AiConversation conversation, AiChatTurnRequest request)
+    private TurnSelection resolveUserSelection(AiChatTurnRequest request, AiConversation conversation)
+    {
+        Long selectedModelId = request.getModelId() != null ? request.getModelId() : conversation.getModelId();
+        if (selectedModelId == null)
+        {
+            AiModel defaultModel = configService.getDefaultEnabledModel();
+            if (defaultModel == null)
+            {
+                throw new ServiceException("没有可用的默认 AI 模型，请先完成模型配置");
+            }
+            selectedModelId = defaultModel.getModelId();
+        }
+
+        AiModel model = configService.requireModel(selectedModelId);
+        boolean sameModel = selectedModelId.equals(conversation.getModelId());
+        String requestedEffort = request.getReasoningEffort();
+        String effort;
+        if (requestedEffort != null)
+        {
+            effort = configService.resolveReasoningEffort(model, requestedEffort);
+        }
+        else if (sameModel && conversation.getReasoningEffort() != null)
+        {
+            effort = configService.resolveReasoningEffort(model, conversation.getReasoningEffort());
+        }
+        else
+        {
+            effort = configService.resolveReasoningEffort(model, null);
+        }
+        return new TurnSelection(model.getModelId(), model.getModelCode(), effort);
+    }
+
+    private AiChatTurnResponse callModel(AiConversation conversation, AiChatTurnRequest request, TurnSelection selection)
     {
         configService.requireAgentRuntimeEnabled();
         List<ApprovedTool> approvedTools = toolPolicy.approve(request.getFrontendTools());
@@ -91,7 +132,11 @@ public class AiAgentLoopService
             callbacks.add(new AiFrontendToolCallback(tool.name(), tool.description(), toJson(tool.inputSchema())));
         }
 
-        AiAgentModelFactory.ModelRuntime runtime = modelFactory.create(conversation.getModelId(), callbacks);
+        AiAgentModelFactory.ModelRuntime runtime = modelFactory.create(selection.modelId(), callbacks,
+                selection.reasoningEffort());
+        TurnSelection actualSelection = new TurnSelection(runtime.model().getModelId(), runtime.model().getModelCode(),
+                selection.reasoningEffort());
+
         List<Message> messages = new ArrayList<>();
         messages.add(new SystemMessage(buildSystemPrompt(request, approvedTools)));
         messages.addAll(toSpringMessages(messageMapper.selectByConversationId(conversation.getConversationId())));
@@ -109,28 +154,29 @@ public class AiAgentLoopService
         {
             throw new ServiceException("AI 模型未返回有效响应");
         }
+
         AssistantMessage output = response.getResult().getOutput();
         if (output.hasToolCalls())
         {
             if (output.getToolCalls().size() != 1)
             {
-                throw new ServiceException("第一阶段不支持一次返回多个页面工具调用");
+                throw new ServiceException("当前不支持一次返回多个页面工具调用");
             }
             if (messageMapper.countToolResultsInCurrentTurn(conversation.getConversationId()) >= MAX_TOOL_RESULTS_PER_TURN)
             {
                 throw new ServiceException("本轮工具调用次数已超过限制");
             }
+
             AssistantMessage.ToolCall modelCall = output.getToolCalls().get(0);
             ApprovedTool approved = approvedTools.stream().filter(t -> t.name().equals(modelCall.name())).findFirst()
                     .orElseThrow(() -> new ServiceException("模型请求了当前页面不可用的工具：" + modelCall.name()));
 
-            // Provider tool_call.id is external input. Never use it as our database/browser
-            // identity: some OpenAI-compatible providers may return a blank or repeated id.
-            // We replay the assistant call and its tool result with this normalized internal id,
-            // which is opaque to the provider but unique inside the conversation.
+            // Provider tool_call.id is external input. Normalize it to our own opaque id.
+            // The normalized id is replayed consistently on both the assistant tool call and
+            // ToolResponseMessage, so duplicate/blank provider ids cannot collide in storage.
             String runtimeCallId = "rtc_" + UUID.randomUUID().toString().replace("-", "");
-            insertMessage(conversation.getConversationId(), "ASSISTANT", trimTo(output.getText(), 12000), runtimeCallId,
-                    modelCall.name(), trimTo(modelCall.arguments(), 20000));
+            insertMessage(conversation.getConversationId(), "ASSISTANT", trimTo(output.getText(), 12000),
+                    runtimeCallId, modelCall.name(), trimTo(modelCall.arguments(), 20000), actualSelection);
 
             AiPendingToolCall pending = new AiPendingToolCall();
             pending.setCallId(runtimeCallId);
@@ -139,14 +185,15 @@ public class AiAgentLoopService
             pending.setToolName(modelCall.name());
             pending.setArgumentsJson(trimTo(modelCall.arguments(), 20000));
             pending.setRiskLevel(approved.riskLevel());
+            pending.setModelId(actualSelection.modelId());
+            pending.setModelCode(actualSelection.modelCode());
+            pending.setReasoningEffort(actualSelection.reasoningEffort());
             try
             {
                 pendingMapper.insert(pending);
             }
             catch (Exception e)
             {
-                // Do not leak SQL/constraint details to the UI. The transaction will roll back
-                // the assistant message together with the failed pending state.
                 throw new ServiceException("AI 页面工具调用状态保存失败，请重试");
             }
 
@@ -160,21 +207,23 @@ public class AiAgentLoopService
         }
 
         String answer = StringUtils.defaultString(output.getText());
-        insertMessage(conversation.getConversationId(), "ASSISTANT", trimTo(answer, 20000), null, null, null);
+        insertMessage(conversation.getConversationId(), "ASSISTANT", trimTo(answer, 20000),
+                null, null, null, actualSelection);
         return AiChatTurnResponse.message(conversation.getConversationId(), answer);
     }
 
-    private void acceptToolResult(AiConversation conversation, Long userId, AiToolResultRequest result)
+    private AiPendingToolCall acceptToolResult(AiConversation conversation, Long userId, AiToolResultRequest result)
     {
         AiPendingToolCall pending = pendingMapper.selectByCall(conversation.getConversationId(), result.getCallId());
         if (pending == null || !"PENDING".equals(pending.getStatus()))
         {
-            throw new ServiceException("待处理的页面工具调用不存在或已经完成");
+            throw new ServiceException("待处理的页面工具调用不存在、已完成或已过期");
         }
         if (!userId.equals(pending.getUserId()))
         {
             throw new ServiceException("不能提交其他用户的页面工具结果");
         }
+
         AiFrontendToolPolicy.ToolPolicy policy;
         try
         {
@@ -184,7 +233,7 @@ public class AiAgentLoopService
         {
             throw new ServiceException("页面工具不在服务端允许列表中");
         }
-        // Permission is checked again on resume so a revoked permission cannot finish a stale call.
+
         List<com.ruoyi.ai.dto.AiFrontendToolDefinition> one = new ArrayList<>();
         com.ruoyi.ai.dto.AiFrontendToolDefinition def = new com.ruoyi.ai.dto.AiFrontendToolDefinition();
         def.setName(pending.getToolName());
@@ -199,12 +248,16 @@ public class AiAgentLoopService
         {
             throw new ServiceException("页面工具调用状态已变化，请重试");
         }
+
         Map<String, Object> payload = new HashMap<>();
         payload.put("success", Boolean.TRUE.equals(result.getSuccess()));
         payload.put("result", result.getResult());
         payload.put("error", trimTo(result.getError(), 2000));
         String resultJson = trimTo(toJson(payload), MAX_TOOL_RESULT_CHARS);
-        insertMessage(conversation.getConversationId(), "TOOL", resultJson, pending.getCallId(), pending.getToolName(), null);
+        TurnSelection selection = new TurnSelection(pending.getModelId(), pending.getModelCode(), pending.getReasoningEffort());
+        insertMessage(conversation.getConversationId(), "TOOL", resultJson,
+                pending.getCallId(), pending.getToolName(), null, selection);
+        return pending;
     }
 
     private AiConversation resolveConversation(AiChatTurnRequest request, Long userId)
@@ -215,19 +268,29 @@ public class AiAgentLoopService
             {
                 throw new ServiceException("Tool Result 必须提供 conversationId");
             }
-            if (request.getModelId() == null)
+
+            Long initialModelId = request.getModelId();
+            if (initialModelId == null)
             {
-                throw new ServiceException("新会话必须选择模型");
+                AiModel defaultModel = configService.getDefaultEnabledModel();
+                if (defaultModel == null)
+                {
+                    throw new ServiceException("新会话必须选择模型，且当前没有可用默认模型");
+                }
+                initialModelId = defaultModel.getModelId();
             }
+
             AiConversation conversation = new AiConversation();
             conversation.setUserId(userId);
-            conversation.setModelId(request.getModelId());
+            conversation.setModelId(initialModelId);
+            conversation.setReasoningEffort(null);
             conversation.setTitle(trimTo(request.getUserMessage(), 80));
             conversation.setRoute(trimTo(request.getRoute(), 255));
             conversation.setStatus("ACTIVE");
             conversationMapper.insert(conversation);
             return conversation;
         }
+
         AiConversation conversation = conversationMapper.selectById(request.getConversationId());
         if (conversation == null || !userId.equals(conversation.getUserId()))
         {
@@ -293,7 +356,7 @@ public class AiAgentLoopService
     }
 
     private void insertMessage(Long conversationId, String role, String content, String toolCallId, String toolName,
-            String toolArguments)
+            String toolArguments, TurnSelection selection)
     {
         AiMessage message = new AiMessage();
         message.setConversationId(conversationId);
@@ -303,6 +366,12 @@ public class AiAgentLoopService
         message.setToolCallId(toolCallId);
         message.setToolName(toolName);
         message.setToolArguments(toolArguments);
+        if (selection != null)
+        {
+            message.setModelId(selection.modelId());
+            message.setModelCode(selection.modelCode());
+            message.setReasoningEffort(selection.reasoningEffort());
+        }
         messageMapper.insert(message);
     }
 
@@ -340,6 +409,11 @@ public class AiAgentLoopService
     private String safeMessage(Exception e)
     {
         String value = StringUtils.defaultString(e.getMessage(), e.getClass().getSimpleName());
+        value = value.replaceAll("(?i)(api[_ -]?key|authorization|token)\\s*[:=]\\s*[^,;\\s]+", "$1=[redacted]");
         return trimTo(value, 300);
+    }
+
+    private record TurnSelection(Long modelId, String modelCode, String reasoningEffort)
+    {
     }
 }
