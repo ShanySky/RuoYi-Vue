@@ -121,7 +121,7 @@ jobs:
                   elif 'CACHE_UNSUPPORTED_PROVIDER_TEST' in latest_user:
                       message = {'role':'assistant','content':'CACHE_FALLBACK_OK'}
                       finish = 'stop'
-                  elif 'NO_REPEAT_WRITE_SETUP' in latest_user:
+                  elif 'NO_REPEAT_WRITE_SETUP' in latest_user and last.get('role') != 'tool':
                       message = {'role':'assistant','content':None,'tool_calls':[{'id':'call_ci_write_once','type':'function','function':{'name':'page_system_user_edit_submit','arguments':'{}'}}]}
                       finish = 'tool_calls'
                   elif 'NO_REPEAT_AFTER_COMPACTION' in latest_user:
