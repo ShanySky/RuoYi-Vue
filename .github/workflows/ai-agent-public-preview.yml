@@ -118,14 +118,15 @@ jobs:
           import json
           import re
           import time
+          import uuid
           from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-          def call(name, args, call_id):
+          def call(name, args):
               return {
                   'role': 'assistant',
                   'content': None,
                   'tool_calls': [{
-                      'id': call_id,
+                      'id': 'call_' + uuid.uuid4().hex,
                       'type': 'function',
                       'function': {'name': name, 'arguments': json.dumps(args, ensure_ascii=False)}
                   }]
@@ -175,7 +176,7 @@ jobs:
                   tool_names = [((tool.get('function') or {}).get('name')) for tool in tools]
 
                   if 'ai_echo_test' in tool_names:
-                      message = call('ai_echo_test', {'value':'AI_OK'}, 'call_preview_capability')
+                      message = call('ai_echo_test', {'value':'AI_OK'})
                       finish = 'tool_calls'
                   elif any(name and name.startswith('page_system_user_') for name in tool_names):
                       user_indexes = [i for i,m in enumerate(messages) if m.get('role') == 'user']
@@ -188,18 +189,28 @@ jobs:
                       want_open = any(word in user_text for word in ['打开','编辑','修改','改成','改为','保存'])
                       want_change = any(word in user_text for word in ['修改','改成','改为','昵称'])
                       want_save = '保存' in user_text and '不要保存' not in user_text and '先别保存' not in user_text
+                      wants_login_name_change = (
+                          any(word in user_text for word in ['用户名称','用户名','登录账号','userName'])
+                          and any(word in user_text for word in ['修改','改成','改为','换成'])
+                      )
 
-                      if step == 0:
-                          message = call('page_system_user_search', {'userName':'ry'}, 'call_preview_1')
+                      if wants_login_name_change:
+                          message = {
+                              'role':'assistant',
+                              'content':'当前 RuoYi 不支持修改已有用户的登录账号 userName；可以修改的是用户昵称 nickName。'
+                          }
+                          finish = 'stop'
+                      elif step == 0:
+                          message = call('page_system_user_search', {'userName':'ry'})
                           finish = 'tool_calls'
                       elif step == 1 and want_open:
-                          message = call('page_system_user_edit_open', {'userId':2}, 'call_preview_2')
+                          message = call('page_system_user_edit_open', {'userId':2})
                           finish = 'tool_calls'
                       elif step == 2 and want_change:
-                          message = call('page_system_user_edit_set_fields', {'nickName': nickname_from(user_text)}, 'call_preview_3')
+                          message = call('page_system_user_edit_set_fields', {'nickName': nickname_from(user_text)})
                           finish = 'tool_calls'
                       elif step == 3 and want_save:
-                          message = call('page_system_user_edit_submit', {}, 'call_preview_4')
+                          message = call('page_system_user_edit_submit', {})
                           finish = 'tool_calls'
                       else:
                           message = {
