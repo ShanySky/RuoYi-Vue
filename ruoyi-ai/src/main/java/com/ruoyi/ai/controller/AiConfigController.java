@@ -120,9 +120,18 @@ public class AiConfigController
     }
 
     @PreAuthorize("@ss.hasPermi('ai:config:edit')")
+    @PostMapping("/models/{modelId}/detect-capabilities")
+    public AjaxResult detectCapabilities(@PathVariable Long modelId)
+    {
+        configService.requireSystemModel(modelId);
+        return AjaxResult.success(capabilityService.detectCapabilities(modelId));
+    }
+
+    @PreAuthorize("@ss.hasPermi('ai:config:edit')")
     @PostMapping("/models/{modelId}/test-reasoning")
     public AjaxResult testReasoning(@PathVariable Long modelId)
     {
+        configService.requireSystemModel(modelId);
         return AjaxResult.success("操作成功", capabilityService.testReasoning(modelId));
     }
 
@@ -137,6 +146,7 @@ public class AiConfigController
     @PostMapping("/models/{modelId}/test-tools")
     public AjaxResult testTools(@PathVariable Long modelId)
     {
+        configService.requireSystemModel(modelId);
         return AjaxResult.success("操作成功", capabilityService.testToolCalling(modelId));
     }
 }
