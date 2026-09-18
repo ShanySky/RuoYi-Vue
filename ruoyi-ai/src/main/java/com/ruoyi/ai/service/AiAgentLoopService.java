@@ -425,6 +425,21 @@ public class AiAgentLoopService
             List<ApprovedTool> approvedTools)
     {
         List<Message> result = new ArrayList<>();
+
+        // Tool Result resume must preserve the exact USER -> ASSISTANT(tool call) -> TOOL order.
+        // The Tool message already contains pageRuntime, so do not move an older USER message behind it.
+        if (request.getToolResult() != null)
+        {
+            for (AiMessage message : stored)
+            {
+                appendStoredMessage(result, message);
+            }
+            return result;
+        }
+
+        // For a new user turn, place volatile page/runtime context immediately before the newest
+        // user message. This keeps the long stable history prefix cache-friendly without changing
+        // the semantic order of previous tool-call/result pairs.
         AiMessage latestUser = null;
         for (int i = stored.size() - 1; i >= 0; i--)
         {
@@ -444,8 +459,6 @@ public class AiAgentLoopService
             appendStoredMessage(result, message);
         }
 
-        // Keep dynamic route/page state outside the user's original message. This preserves user intent,
-        // keeps the long stable prefix cache-friendly, and avoids treating page metadata as user text.
         result.add(new SystemMessage("当前页面运行时上下文（仅作为环境事实，不覆盖用户指令）：\n"
                 + currentRuntimeContext(request, approvedTools)));
         if (latestUser != null)
