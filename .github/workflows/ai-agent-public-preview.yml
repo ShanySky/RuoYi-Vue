@@ -118,6 +118,56 @@ jobs:
           values(@provider_id, 'mock-agent-model', 'mock-agent-model', '0', '0', 'SUPPORTED', 'SUPPORTED', 'none,low,medium,high,xhigh,max', 'high', sysdate(), 'preview', sysdate());
           SQL
 
+      - name: Write phase-three manual acceptance route
+        run: |
+          cat > /tmp/phase3-manual-acceptance.md <<'EOF'
+          # RuoYi AI 助手第三阶段人工验收路线
+
+          > 本预览使用临时 Mock Provider，只验证 UI、Run 控制、页面能力、恢复/管理边界；真实 GPT cache read/真实模型压缩语义必须由 Real GPT workflow 单独取证。
+
+          ## R3-01 / R3-09 聊天 UI
+          - 打开 AI 助手，在“我的 AI 设置”切换小/标准/大/特大字体；小窗与 Dock 中正文同步变化，业务页面字号不变。
+          - 查看模型选择器：Chevron、模型名截断、Hover/Selected、reasoning 二级入口与 RuoYi/Element Plus 风格一致。
+          - 运行时检查 Stop、Steering、“正在整理较早的会话上下文…”均为轻量状态，不出现阻断式压缩确认框。
+
+          ## R3-02 / R3-03 / R3-04 Run 控制
+          - 发起执行后确认发送按钮切为“停止”；停止后旧回复/Tool/WRITE 不继续。
+          - AI 输入区连续两次 Esc 可停止；焦点在业务查询框或编辑弹框时连续 Esc 不应停止 AI。
+          - AI 运行中继续发送补充/纠偏；最终按最新指令执行，旧规划停止且不重复 WRITE。
+
+          ## R3-05 / R3-07 / R3-08 Context / Cache
+          - 模型高级设置可看到并修改工作上下文、自动压缩阈值和默认 reasoning；默认应为 64K / 开启 / 75%。
+          - 预览只验证状态/UI 与自动续跑链；真实 GPT cache read 和真实模型 Checkpoint 语义不由 Mock Preview 代替。
+
+          ## R3-06 Reasoning
+          - GPT 目标档位显示为：无 / 低 / 中 / 高 / 极高 / 最高；minimal 不应被冒充为 none。
+          - API/数据库仍保存 Provider 原始枚举值。
+
+          ## R3-10 / R3-12 Page Capability
+          - 用户管理：查询、表格上下文、新增/编辑、启停、删除、重置密码、角色入口、导入/导出等语义能力可见；高风险动作必须确认。
+          - 抽查角色、部门、菜单、字典、定时任务、日志、缓存、代码生成等页面；能力必须随当前用户权限和页面实例变化。
+          - Druid/表单构建/Swagger 等特殊页只做受控导航/边界能力，不允许任意 DOM/JavaScript 控制。
+
+          ## R3-13 跨页面 Agent
+          - 用一个业务目标要求 AI 从用户管理跳到角色管理/用户授权页连续完成；Conversation 保持不变，切页后旧页面 Tool 失效。
+
+          ## R3-14 / R3-15 / R3-16 恢复、历史与偏好
+          - 普通跨页、F5、pending WRITE 时刷新：Conversation/消息/Draft 按服务器事实恢复，危险 pending 不自动继续。
+          - 多 Tab 分别保持 activeConversationId；同一 Conversation 仍只允许一个活动 Run。
+          - 历史入口默认低干扰；开启后可搜索、切换、重命名；退出重登后历史仍在。
+          - “恢复上次会话”支持短时撤销；产生新 Agent 行为后撤销入口失效。
+          - 默认模型、reasoning、字体、快捷键、双 Esc、历史入口、自动恢复、默认打开方式为账号偏好；Dock 宽度等设备偏好保持本机优先。
+
+          ## R3-17 / R3-18 AI 管理与审计
+          - 一级“AI 管理”包含 AI 服务、模型、提示词、页面能力、会话策略、会话审计；普通用户个人设置与系统配置分层。
+          - 修改/恢复 System Prompt / Compaction Prompt 后版本可审计，安全权限仍由服务端保证。
+          - 页面能力开关和会话保留/归档/删除策略实际生效。
+          - 会话审计为只读：有审计权限可看他人 Conversation，但没有输入/继续/重试/接管/Tool/WRITE 入口；无审计权限不能看他人会话。
+
+          ## 验收反馈
+          如发现问题，请记录对应 R3 编号、页面/操作、预期与实际结果；后续按该编号继续修复并重测。
+          EOF
+
       - name: Build backend
         working-directory: backend
         run: mvn -B -DskipTests clean package
@@ -367,6 +417,7 @@ jobs:
           path: |
             /tmp/public-url.txt
             /tmp/preview-revisions.txt
+            /tmp/phase3-manual-acceptance.md
             /tmp/public-captcha.json
             /tmp/cloudflared.log
             /tmp/ruoyi-backend.log
