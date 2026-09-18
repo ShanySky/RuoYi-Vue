@@ -12,7 +12,9 @@ public class AiRunService {
  }
  public AiRun requireOwned(Long runId,Long userId){AiRun r=runs.selectById(runId);if(r==null||!userId.equals(r.getUserId()))throw new ServiceException("Run 不存在或无权访问");return r;}
  public AiRun get(Long runId){return runs.selectById(runId);} public AiRun active(Long conversationId){return runs.selectActiveByConversation(conversationId);} public AiRun byClientKey(String key,Long userId){AiRun r=runs.selectByClientKey(key,userId);if(r==null)throw new ServiceException("Run 不存在或无权访问");return r;}
- public boolean runnable(Long runId){AiRun r=runs.selectById(runId);return r!=null&&"RUNNING".equals(r.getStatus());}
+ public boolean runnable(Long runId){AiRun r=runs.selectById(runId);return r!=null&&("RUNNING".equals(r.getStatus())||"COMPACTING".equals(r.getStatus()));}
+ public boolean beginCompaction(Long runId){return runs.beginCompaction(runId)==1;}
+ public boolean endCompaction(Long runId){return runs.endCompaction(runId)==1;}
  public void resumeTool(Long runId){if(runs.updateActiveState(runId,"RUNNING")!=1)throw new ServiceException("当前 Run 已停止或被新指令替代");}
  public void waitingTool(Long runId){if(runs.updateActiveState(runId,"WAITING_TOOL")!=1)throw new ServiceException("当前 Run 已停止或被新指令替代");}
  public void complete(Long runId){runs.complete(runId);inFlight.remove(runId);}
