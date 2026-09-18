@@ -1,5 +1,7 @@
 name: AI Agent Public Preview
 
+# Phase-two final manual preview refreshes the current frontend branch head.
+
 on:
   push:
     branches:
