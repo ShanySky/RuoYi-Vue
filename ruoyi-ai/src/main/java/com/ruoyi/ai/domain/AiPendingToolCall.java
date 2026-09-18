@@ -11,6 +11,9 @@ public class AiPendingToolCall
     private String toolName;
     private String argumentsJson;
     private String riskLevel;
+    private Long modelId;
+    private String modelCode;
+    private String reasoningEffort;
     private String status;
     private Date createTime;
     private Date expireTime;
@@ -30,6 +33,12 @@ public class AiPendingToolCall
     public void setArgumentsJson(String argumentsJson) { this.argumentsJson = argumentsJson; }
     public String getRiskLevel() { return riskLevel; }
     public void setRiskLevel(String riskLevel) { this.riskLevel = riskLevel; }
+    public Long getModelId() { return modelId; }
+    public void setModelId(Long modelId) { this.modelId = modelId; }
+    public String getModelCode() { return modelCode; }
+    public void setModelCode(String modelCode) { this.modelCode = modelCode; }
+    public String getReasoningEffort() { return reasoningEffort; }
+    public void setReasoningEffort(String reasoningEffort) { this.reasoningEffort = reasoningEffort; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
     public Date getCreateTime() { return createTime; }
