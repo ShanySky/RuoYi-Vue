@@ -146,9 +146,16 @@ jobs:
                       message = tool_call('ai_echo_test', {'value': 'AI_OK'})
                       finish = 'tool_calls'
                   elif any(name and name.startswith('page_system_user_') for name in names):
+                      latest_user = next((msg.get('content') or '' for msg in reversed(messages) if msg.get('role') == 'user'), '')
+                      wants_login_name_change = (
+                          any(word in latest_user for word in ['用户名称', '用户名', '登录账号', 'userName'])
+                          and any(word in latest_user for word in ['修改', '改成', '改为', '换成'])
+                      )
                       tool_results = [msg for msg in messages if msg.get('role') == 'tool']
                       step = len(tool_results)
-                      if step == 0:
+                      if wants_login_name_change and step == 0:
+                          message = {'role': 'assistant', 'content': '当前 RuoYi 不支持修改已有用户的登录账号 userName；可以修改的是用户昵称 nickName。'}
+                      elif step == 0:
                           message = tool_call('page_system_user_search', {'userName': 'ry'})
                           finish = 'tool_calls'
                       elif step == 1:
