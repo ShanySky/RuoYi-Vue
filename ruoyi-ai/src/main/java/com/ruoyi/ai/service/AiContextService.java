@@ -18,7 +18,18 @@ public class AiContextService {
   payload.append("需要压缩的后续历史：\n");appendCompactionHistory(payload,segment);
   try{
    var runtime=models.create(model.getModelId(),List.of(),reasoningEffort,"ruoyi:compaction:"+conversation.getConversationId());
-   ChatResponse response=runs.call(run.getRunId(),()->runtime.chatModel().call(new Prompt(List.of(new SystemMessage(prompts.render(cpPrompt,Map.of("conversationId",conversation.getConversationId(),"modelCode",StringUtils.defaultString(model.getModelCode())))),new UserMessage(payload.toString())),runtime.options())));
+   Prompt compactionPrompt=new Prompt(List.of(new SystemMessage(prompts.render(cpPrompt,Map.of("conversationId",conversation.getConversationId(),"modelCode",StringUtils.defaultString(model.getModelCode())))),new UserMessage(payload.toString())),runtime.options());
+   ChatResponse response;
+   try{
+    response=runs.call(run.getRunId(),()->runtime.chatModel().call(compactionPrompt));
+   }catch(InterruptedException interrupted){
+    throw interrupted;
+   }catch(Exception cacheError){
+    if(!models.isPromptCacheUnsupported(cacheError))throw cacheError;
+    var fallback=models.create(model.getModelId(),List.of(),reasoningEffort,null);
+    Prompt fallbackPrompt=new Prompt(compactionPrompt.getInstructions(),fallback.options());
+    response=runs.call(run.getRunId(),()->fallback.chatModel().call(fallbackPrompt));
+   }
    runs.recordUsage(run.getRunId(),response);
    if(response==null||response.getResult()==null||response.getResult().getOutput()==null||StringUtils.isBlank(response.getResult().getOutput().getText()))throw new ServiceException("上下文压缩未返回有效 Checkpoint");
    AiCheckpoint cp=new AiCheckpoint();cp.setConversationId(conversation.getConversationId());cp.setRunId(run.getRunId());cp.setCoveredSequenceNo(cutoff);cp.setSummary(response.getResult().getOutput().getText().trim());cp.setModelId(model.getModelId());cp.setModelCode(model.getModelCode());cp.setEstimatedTokens(estimate);cp.setStatus("ACTIVE");checkpoints.insert(cp);return cp;
