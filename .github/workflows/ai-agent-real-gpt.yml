@@ -1,0 +1,282 @@
+name: AI Agent Real GPT Acceptance
+
+on:
+  push:
+    branches:
+      - chatgpt/ai-agent-assistant
+    paths:
+      - '.github/workflows/ai-agent-real-gpt.yml'
+  workflow_dispatch:
+
+jobs:
+  real-gpt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: password
+          MYSQL_DATABASE: ry-vue
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -ppassword"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+      redis:
+        image: redis:7.4
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+
+    env:
+      R3_REAL_GPT_BASE_URL: ${{ vars.R3_REAL_GPT_BASE_URL }}
+      R3_REAL_GPT_MODEL: ${{ vars.R3_REAL_GPT_MODEL }}
+      R3_REAL_GPT_REASONING: ${{ vars.R3_REAL_GPT_REASONING }}
+      R3_REAL_GPT_TOKEN: ${{ secrets.R3_REAL_GPT_TOKEN }}
+      AI_MASTER_KEY: r3-real-gpt-acceptance-master-key
+
+    steps:
+      - name: Checkout backend
+        uses: actions/checkout@v4
+
+      - name: Check real GPT acceptance configuration
+        id: real_gpt
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=()
+          [ -n "$R3_REAL_GPT_BASE_URL" ] || missing+=("R3_REAL_GPT_BASE_URL variable")
+          [ -n "$R3_REAL_GPT_MODEL" ] || missing+=("R3_REAL_GPT_MODEL variable")
+          [ -n "$R3_REAL_GPT_TOKEN" ] || missing+=("R3_REAL_GPT_TOKEN secret")
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            printf 'REAL_GPT_NOT_CONFIGURED: %s\n' "${missing[*]}" | tee /tmp/real-gpt-status.txt
+            exit 0
+          fi
+          if [[ "$R3_REAL_GPT_MODEL" != gpt-* ]]; then
+            echo "::error::R3_REAL_GPT_MODEL must identify a GPT model (gpt-*), got: $R3_REAL_GPT_MODEL"
+            exit 1
+          fi
+          echo "configured=true" >> "$GITHUB_OUTPUT"
+          {
+            echo "REAL_GPT_CONFIGURED=true"
+            echo "BASE_URL_HOST=$(python3 - <<'PY'"
+            echo "import os, urllib.parse"
+            echo "print(urllib.parse.urlparse(os.environ['R3_REAL_GPT_BASE_URL']).hostname or '')"
+            echo "PY"
+            echo ")"
+            echo "MODEL=$R3_REAL_GPT_MODEL"
+            echo "REASONING=${R3_REAL_GPT_REASONING:-high}"
+          } | tee /tmp/real-gpt-status.txt
+
+      - name: Set up Java 17
+        if: steps.real_gpt.outputs.configured == 'true'
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Initialize database
+        if: steps.real_gpt.outputs.configured == 'true'
+        run: |
+          mysql -h127.0.0.1 -uroot -ppassword ry-vue < sql/ry_20260417.sql
+          mysql -h127.0.0.1 -uroot -ppassword ry-vue < sql/quartz.sql
+          mysql -h127.0.0.1 -uroot -ppassword ry-vue < sql/ai_20260918.sql
+          mysql -h127.0.0.1 -uroot -ppassword -e "update sys_config set config_value='false' where config_key='sys.account.captchaEnabled'" ry-vue
+
+      - name: Build backend
+        if: steps.real_gpt.outputs.configured == 'true'
+        run: mvn -B -DskipTests clean package
+
+      - name: Start RuoYi backend
+        if: steps.real_gpt.outputs.configured == 'true'
+        run: |
+          sudo mkdir -p /home/ruoyi/logs /home/ruoyi/uploadPath
+          sudo chown -R "$USER":"$USER" /home/ruoyi
+          nohup java -jar ruoyi-admin/target/ruoyi-admin.jar > /tmp/ruoyi-real-gpt.log 2>&1 &
+          echo $! > /tmp/ruoyi-real-gpt.pid
+          for i in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:8080/captchaImage >/tmp/captcha.json; then
+              exit 0
+            fi
+            if ! kill -0 "$(cat /tmp/ruoyi-real-gpt.pid)" 2>/dev/null; then
+              cat /tmp/ruoyi-real-gpt.log
+              exit 1
+            fi
+            sleep 2
+          done
+          cat /tmp/ruoyi-real-gpt.log
+          exit 1
+
+      - name: Run real GPT cache and compaction acceptance
+        if: steps.real_gpt.outputs.configured == 'true'
+        env:
+          REAL_REASONING: ${{ vars.R3_REAL_GPT_REASONING }}
+        run: |
+          cat > /tmp/real_gpt_acceptance.py <<'PY'
+          import json
+          import os
+          import time
+          import uuid
+          import urllib.request
+          import urllib.error
+
+          BASE = 'http://127.0.0.1:8080'
+          PROVIDER_BASE = os.environ['R3_REAL_GPT_BASE_URL'].rstrip('/')
+          PROVIDER_TOKEN = os.environ['R3_REAL_GPT_TOKEN']
+          MODEL = os.environ['R3_REAL_GPT_MODEL']
+          REASONING = os.environ.get('REAL_REASONING') or 'high'
+
+          def request(path, method='GET', body=None, token=None):
+              data = None if body is None else json.dumps(body, ensure_ascii=False).encode()
+              headers = {}
+              if body is not None:
+                  headers['Content-Type'] = 'application/json'
+              if token:
+                  headers['Authorization'] = 'Bearer ' + token
+              req = urllib.request.Request(BASE + path, data=data, headers=headers, method=method)
+              try:
+                  with urllib.request.urlopen(req, timeout=180) as resp:
+                      payload = json.loads(resp.read().decode())
+              except urllib.error.HTTPError as exc:
+                  raw = exc.read().decode(errors='replace')
+                  raise RuntimeError(f'{method} {path} HTTP {exc.code}: {raw[:1000]}') from exc
+              if payload.get('code') != 200:
+                  raise RuntimeError(f'{method} {path} failed: {payload}')
+              return payload.get('data')
+
+          login = request('/login', 'POST', {'username':'admin','password':'admin123'})
+          token = login['token']
+
+          provider = request('/ai/config/provider', 'POST', {
+              'name':'R3 Real GPT Acceptance',
+              'baseUrl':PROVIDER_BASE,
+              'token':PROVIDER_TOKEN,
+              'enabled':True,
+              'timeoutSeconds':150
+          }, token)
+
+          discovered = request('/ai/config/models/discover', 'POST', None, token) or []
+          if MODEL not in discovered:
+              raise RuntimeError(f'Real GPT model {MODEL!r} not returned by Provider /models; sample={discovered[:20]}')
+          request('/ai/config/models', 'POST', {'modelCodes':[MODEL]}, token)
+          models = request('/ai/config/models', 'GET', None, token) or []
+          selected = next((m for m in models if m.get('modelCode') == MODEL), None)
+          if not selected:
+              raise RuntimeError('Real GPT model was not persisted after selection')
+          model_id = selected['modelId']
+
+          def create_conversation():
+              return request('/ai/chat/conversations', 'POST', {
+                  'modelId':model_id,
+                  'reasoningEffort':REASONING,
+                  'route':'/index'
+              }, token)['conversationId']
+
+          def turn(conversation_id, message):
+              result = request('/ai/chat/turn', 'POST', {
+                  'conversationId':conversation_id,
+                  'modelId':model_id,
+                  'reasoningEffort':REASONING,
+                  'clientRunKey':str(uuid.uuid4()),
+                  'route':'/index',
+                  'pageContext':{},
+                  'frontendTools':[],
+                  'userMessage':message
+              }, token)
+              if result.get('type') != 'MESSAGE':
+                  raise RuntimeError(f'Expected MESSAGE from real GPT, got: {result}')
+              return result
+
+          cache_conversation = create_conversation()
+          stable_marker = 'R3_CACHE_STABLE_MARKER_918'
+          large_prefix = (stable_marker + ' stable-prefix-data ') * 700
+          turn(cache_conversation, 'Reply with CACHE_ONE only. ' + large_prefix)
+          for label in ('CACHE_TWO', 'CACHE_THREE', 'CACHE_FOUR'):
+              time.sleep(1)
+              turn(cache_conversation, f'Reply with {label} only.')
+          cache_audit = request(f'/ai/admin/audit/{cache_conversation}', 'GET', None, token)
+          cache_runs = cache_audit.get('runs') or []
+          max_cache_read = max([int(r.get('cacheReadTokens') or 0) for r in cache_runs] or [0])
+          if max_cache_read <= 0:
+              raise RuntimeError('Real GPT requests completed but no cache_read_tokens > 0 was observed')
+
+          request(f'/ai/config/models/{model_id}/runtime-settings', 'PUT', {
+              'contextWindowTokens':8192,
+              'autoCompaction':True,
+              'compactionThresholdPercent':50
+          }, token)
+          semantic_conversation = create_conversation()
+          semantic_marker = 'ORANGE_7429'
+          turn(semantic_conversation,
+               '当前任务标记是 ' + semantic_marker + '。后续无论如何压缩上下文都必须保留这个标记。' + (' A' * 6500))
+          turn(semantic_conversation,
+               '继续当前任务；保持任务标记不变，并记住下一步是核对压缩后的连续性。' + (' B' * 6500))
+          semantic_audit = request(f'/ai/admin/audit/{semantic_conversation}', 'GET', None, token)
+          checkpoints = semantic_audit.get('checkpoints') or []
+          if not checkpoints:
+              raise RuntimeError('Real GPT compaction test did not create a checkpoint')
+          latest_summary = str(checkpoints[-1].get('summary') or '')
+          if semantic_marker not in latest_summary:
+              raise RuntimeError('Checkpoint did not preserve the semantic marker')
+          final_turn = turn(semantic_conversation, '只回复当前任务标记，不要解释。')
+          if semantic_marker not in str(final_turn.get('message') or ''):
+              raise RuntimeError('Post-compaction continuation did not recover the semantic marker')
+
+          request(f'/ai/config/models/{model_id}/runtime-settings', 'PUT', {
+              'contextWindowTokens':65536,
+              'autoCompaction':True,
+              'compactionThresholdPercent':75
+          }, token)
+
+          evidence = {
+              'providerHost': urllib.parse.urlparse(PROVIDER_BASE).hostname if False else None,
+              'model': MODEL,
+              'reasoning': REASONING,
+              'cacheConversationId': cache_conversation,
+              'maxCacheReadTokens': max_cache_read,
+              'semanticConversationId': semantic_conversation,
+              'checkpointCount': len(checkpoints),
+              'checkpointPreservedMarker': True,
+              'continuationPreservedMarker': True,
+              'runtimeReset': {'contextWindowTokens':65536, 'compactionThresholdPercent':75}
+          }
+          with open('/tmp/real-gpt-evidence.json','w',encoding='utf-8') as fp:
+              json.dump(evidence, fp, ensure_ascii=False, indent=2)
+          print(json.dumps(evidence, ensure_ascii=False))
+          PY
+          python3 /tmp/real_gpt_acceptance.py
+
+      - name: Verify real GPT evidence
+        if: steps.real_gpt.outputs.configured == 'true'
+        run: |
+          python3 - <<'PY'
+          import json
+          with open('/tmp/real-gpt-evidence.json', encoding='utf-8') as fp:
+              data=json.load(fp)
+          assert data['maxCacheReadTokens'] > 0
+          assert data['checkpointPreservedMarker'] is True
+          assert data['continuationPreservedMarker'] is True
+          assert data['runtimeReset']['contextWindowTokens'] == 65536
+          assert data['runtimeReset']['compactionThresholdPercent'] == 75
+          print('REAL_GPT_ACCEPTANCE=PASS')
+          PY
+
+      - name: Upload real GPT evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-agent-real-gpt-acceptance
+          path: |
+            /tmp/real-gpt-status.txt
+            /tmp/real-gpt-evidence.json
+            /tmp/ruoyi-real-gpt.log
+          if-no-files-found: warn
