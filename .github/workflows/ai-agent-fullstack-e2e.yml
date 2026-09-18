@@ -240,6 +240,7 @@ jobs:
           cat /tmp/ruoyi-frontend.log
           exit 1
 
+      # Phase-two browser acceptance always checks out the current frontend branch head.
       - name: Run browser closed-loop acceptance
         working-directory: frontend
         env:
