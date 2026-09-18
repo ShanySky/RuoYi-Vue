@@ -114,7 +114,7 @@ public class AiFrontendToolPolicy
 
         String[] actionSuffixes = {
                 "reset_password", "change_status", "add_set_fields", "edit_set_fields",
-                "add_submit", "edit_submit", "import_open", "auth_role", "auth_user",
+                "add_submit", "edit_submit", "import_open", "refresh_cache", "auth_role", "auth_user",
                 "add_open", "edit_open", "search", "reset", "delete", "export", "view"
         };
 
@@ -169,6 +169,10 @@ public class AiFrontendToolPolicy
             }
             case "edit_submit", "change_status" -> {
                 permissionAction = "edit";
+                risk = "WRITE";
+            }
+            case "refresh_cache" -> {
+                permissionAction = "remove";
                 risk = "WRITE";
             }
             case "delete" -> {
