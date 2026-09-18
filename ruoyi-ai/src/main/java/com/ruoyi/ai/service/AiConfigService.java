@@ -101,7 +101,7 @@ public class AiConfigService
      * Test whether the current form can load the Provider's /models catalog.
      * This does not persist any model.
      */
-    public List<String> testConnection(AiProviderSaveRequest request)
+    public List<String> testModelLoad(AiProviderSaveRequest request)
     {
         AiProvider existing = providerMapper.selectFirst();
         String baseUrl = StringUtils.isNotEmpty(request.getBaseUrl()) ? request.getBaseUrl()
