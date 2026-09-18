@@ -149,9 +149,11 @@ jobs:
             http://127.0.0.1:8080/ai/config/provider)
           printf '%s' "$PROVIDER" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["code"]==200; assert d["data"]["hasToken"] is True; assert "tokenCipher" not in d["data"]'
 
-          curl -fsS -H "$AUTH" -X POST http://127.0.0.1:8080/ai/config/models/sync > /tmp/sync.json
-          MODEL_ID=$(curl -fsS -H "$AUTH" http://127.0.0.1:8080/ai/config/models | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["code"]==200; print(d["data"][0]["modelId"])')
-          curl -fsS -H "$AUTH" -H 'Content-Type: application/json' -X PUT -d '{"enabled":true}' "http://127.0.0.1:8080/ai/config/models/$MODEL_ID/enabled" >/tmp/enabled.json
+          DISCOVERED=$(curl -fsS -H "$AUTH" -X POST http://127.0.0.1:8080/ai/config/models/discover)
+          printf '%s' "$DISCOVERED" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["code"]==200; assert d["data"]==["mock-agent-model"]'
+          curl -fsS -H "$AUTH" http://127.0.0.1:8080/ai/config/models | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["code"]==200; assert d["data"]==[]'
+          ADDED=$(curl -fsS -H "$AUTH" -H 'Content-Type: application/json' -X POST -d '{"modelCodes":["mock-agent-model"]}' http://127.0.0.1:8080/ai/config/models)
+          MODEL_ID=$(printf '%s' "$ADDED" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["code"]==200; assert len(d["data"])==1; print(d["data"][0]["modelId"])')
           curl -fsS -H "$AUTH" -X PUT "http://127.0.0.1:8080/ai/config/models/$MODEL_ID/default" >/tmp/default.json
           curl -fsS -H "$AUTH" -X POST "http://127.0.0.1:8080/ai/config/models/$MODEL_ID/test-chat" | tee /tmp/test-chat.json | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["code"]==200; assert d["data"]=="AI_OK"'
           curl -fsS -H "$AUTH" -X POST "http://127.0.0.1:8080/ai/config/models/$MODEL_ID/test-tools" | tee /tmp/test-tools.json | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["code"]==200; assert d["data"]=="SUPPORTED"'
