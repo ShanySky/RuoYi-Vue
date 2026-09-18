@@ -221,7 +221,14 @@ select 'COMPACTION',
 where not exists (select 1 from ai_prompt where prompt_type='COMPACTION');
 
 insert into ai_page_config(route,page_name,enabled,create_by,create_time) values
-('/system/user','用户管理','0','system',sysdate()),('/system/user-auth/role/*','分配角色','0','system',sysdate()),('/system/role','角色管理','0','system',sysdate()),('/system/menu','菜单管理','0','system',sysdate()),('/system/dept','部门管理','0','system',sysdate()),('/system/post','岗位管理','0','system',sysdate()),('/system/dict','字典类型','0','system',sysdate()),('/system/notice','通知公告','0','system',sysdate()),('/monitor/online','在线用户','0','system',sysdate()),('/monitor/job','定时任务','0','system',sysdate()),('/monitor/logininfor','登录日志','0','system',sysdate()),('/monitor/operlog','操作日志','0','system',sysdate()),('/monitor/cache','缓存监控','0','system',sysdate()),('/monitor/server','服务监控','0','system',sysdate())
+('/system/user','用户管理','0','system',sysdate()),('/system/user-auth/role/*','分配角色','0','system',sysdate()),('/system/role','角色管理','0','system',sysdate()),('/system/menu','菜单管理','0','system',sysdate()),('/system/dept','部门管理','0','system',sysdate()),('/system/post','岗位管理','0','system',sysdate()),('/system/dict','字典类型','0','system',sysdate()),('/system/notice','通知公告','0','system',sysdate()),('/monitor/online','在线用户','0','system',sysdate()),('/monitor/job','定时任务','0','system',sysdate()),('/monitor/logininfor','登录日志','0','system',sysdate()),('/monitor/operlog','操作日志','0','system',sysdate()),('/monitor/cache','缓存监控','0','system',sysdate()),('/monitor/server','服务监控','0','system',sysdate()),
+('/system/role-auth/user/*','角色分配用户','0','system',sysdate()),
+('/system/user/profile','个人中心','0','system',sysdate()),
+('/tool/gen','代码生成','0','system',sysdate()),
+('/tool/gen-edit/index/*','修改生成配置','0','system',sysdate()),
+('/tool/build','表单构建','0','system',sysdate()),
+('/tool/swagger','系统接口','0','system',sysdate()),
+('/monitor/druid','数据监控','0','system',sysdate())
 on duplicate key update page_name=values(page_name);
 insert into sys_config(config_name,config_key,config_value,config_type,create_by,create_time,remark) select 'AI 会话保留天数','ai.conversation.retentionDays','90','Y','system',sysdate(),'超过保留期且无活动 Run 的会话由 AI 清理任务物理清理' where not exists(select 1 from sys_config where config_key='ai.conversation.retentionDays');
 insert into sys_config(config_name,config_key,config_value,config_type,create_by,create_time,remark) select 'AI 用户允许归档会话','ai.conversation.userArchiveEnabled','true','Y','system',sysdate(),'用户是否可将自己的会话归档' where not exists(select 1 from sys_config where config_key='ai.conversation.userArchiveEnabled');
