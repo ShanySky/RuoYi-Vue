@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.ruoyi.ai.domain.AiModel;
 import com.ruoyi.ai.dto.AiModelStatusRequest;
 import com.ruoyi.ai.dto.AiProviderSaveRequest;
+import com.ruoyi.ai.dto.AiReasoningEffortRequest;
 import com.ruoyi.ai.service.AiConfigService;
 import com.ruoyi.ai.service.AiModelCapabilityService;
 import com.ruoyi.common.annotation.Log;
@@ -90,6 +91,21 @@ public class AiConfigController
     {
         configService.setDefaultModel(modelId);
         return AjaxResult.success();
+    }
+
+    @PreAuthorize("@ss.hasPermi('ai:config:edit')")
+    @PutMapping("/models/{modelId}/default-reasoning")
+    public AjaxResult setDefaultReasoning(@PathVariable Long modelId, @RequestBody AiReasoningEffortRequest request)
+    {
+        configService.setDefaultReasoningEffort(modelId, request == null ? null : request.getReasoningEffort());
+        return AjaxResult.success();
+    }
+
+    @PreAuthorize("@ss.hasPermi('ai:config:edit')")
+    @PostMapping("/models/{modelId}/test-reasoning")
+    public AjaxResult testReasoning(@PathVariable Long modelId)
+    {
+        return AjaxResult.success("操作成功", capabilityService.testReasoning(modelId));
     }
 
     @PreAuthorize("@ss.hasPermi('ai:config:edit')")
