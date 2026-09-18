@@ -128,6 +128,7 @@ public class AiConfigService
                 model.setDefaultModel("1");
                 model.setToolCapability(CAPABILITY_UNKNOWN);
                 model.setReasoningCapability(CAPABILITY_UNKNOWN);
+                model.setReasoningEfforts(null);
                 model.setDefaultReasoningEffort(null);
                 model.setLastSyncTime(now);
                 model.setCreateBy(username);
@@ -196,9 +197,9 @@ public class AiConfigService
     {
         AiModel model = requireModel(modelId);
         String normalized = normalizeReasoningEffort(reasoningEffort);
-        if (normalized != null && !CAPABILITY_SUPPORTED.equals(model.getReasoningCapability()))
+        if (normalized != null && !supportsReasoningEffort(model, normalized))
         {
-            throw new ServiceException("该模型尚未确认支持思考档位，请先进行思考能力测试或使用 Provider 默认");
+            throw new ServiceException("该模型尚未确认支持思考档位 " + normalized + "，请先进行思考能力测试或使用 Provider 默认");
         }
         model.setDefaultReasoningEffort(normalized);
         model.setUpdateBy(SecurityUtils.getUsername());
@@ -212,11 +213,27 @@ public class AiConfigService
         {
             normalized = normalizeReasoningEffort(model.getDefaultReasoningEffort());
         }
-        if (normalized != null && !CAPABILITY_SUPPORTED.equals(model.getReasoningCapability()))
+        if (normalized != null && !supportsReasoningEffort(model, normalized))
         {
-            throw new ServiceException("所选模型尚未确认支持思考档位，请使用 Provider 默认或先测试能力");
+            throw new ServiceException("所选模型尚未确认支持思考档位 " + normalized + "，请使用 Provider 默认或先测试能力");
         }
         return normalized;
+    }
+
+    private boolean supportsReasoningEffort(AiModel model, String effort)
+    {
+        if (!CAPABILITY_SUPPORTED.equals(model.getReasoningCapability()) || StringUtils.isEmpty(model.getReasoningEfforts()))
+        {
+            return false;
+        }
+        for (String item : model.getReasoningEfforts().split(","))
+        {
+            if (effort.equals(item.trim()))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     public String normalizeReasoningEffort(String reasoningEffort)
