@@ -1,0 +1,358 @@
+name: AI Agent Public Preview
+
+on:
+  push:
+    branches:
+      - chatgpt/ai-agent-assistant
+    paths:
+      - '.github/workflows/ai-agent-public-preview.yml'
+  workflow_dispatch:
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: password
+          MYSQL_DATABASE: ry-vue
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -ppassword"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+      redis:
+        image: redis:7.4
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+
+    steps:
+      - name: Checkout backend
+        uses: actions/checkout@v4
+        with:
+          path: backend
+
+      - name: Checkout Vue3 frontend
+        uses: actions/checkout@v4
+        with:
+          repository: ShanySky/RuoYi-Vue3
+          ref: chatgpt/ai-agent-assistant
+          path: frontend
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Initialize database
+        run: |
+          mysql -h127.0.0.1 -uroot -ppassword ry-vue < backend/sql/ry_20260417.sql
+          mysql -h127.0.0.1 -uroot -ppassword ry-vue < backend/sql/quartz.sql
+          mysql -h127.0.0.1 -uroot -ppassword ry-vue < backend/sql/ai_20260918.sql
+          mysql -h127.0.0.1 -uroot -ppassword -e "update sys_config set config_value='false' where config_key='sys.account.captchaEnabled'" ry-vue
+
+      - name: Preconfigure preview AI provider
+        env:
+          AI_MASTER_KEY: preview-only-master-key
+        run: |
+          cat > /tmp/PreviewToken.java <<'JAVA'
+          import java.nio.charset.StandardCharsets;
+          import java.security.MessageDigest;
+          import java.security.SecureRandom;
+          import java.util.Base64;
+          import javax.crypto.Cipher;
+          import javax.crypto.spec.GCMParameterSpec;
+          import javax.crypto.spec.SecretKeySpec;
+
+          public class PreviewToken {
+              public static void main(String[] args) throws Exception {
+                  String masterKey = System.getenv("AI_MASTER_KEY");
+                  String plainText = "preview-only-token";
+                  byte[] iv = new byte[12];
+                  new SecureRandom().nextBytes(iv);
+                  byte[] key = MessageDigest.getInstance("SHA-256").digest(masterKey.getBytes(StandardCharsets.UTF_8));
+                  Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+                  cipher.init(Cipher.ENCRYPT_MODE, new SecretKeySpec(key, "AES"), new GCMParameterSpec(128, iv));
+                  byte[] encrypted = cipher.doFinal(plainText.getBytes(StandardCharsets.UTF_8));
+                  byte[] payload = new byte[iv.length + encrypted.length];
+                  System.arraycopy(iv, 0, payload, 0, iv.length);
+                  System.arraycopy(encrypted, 0, payload, iv.length, encrypted.length);
+                  System.out.print("v1:" + Base64.getEncoder().encodeToString(payload));
+              }
+          }
+          JAVA
+          javac /tmp/PreviewToken.java
+          TOKEN_CIPHER=$(java -cp /tmp PreviewToken)
+          mysql -h127.0.0.1 -uroot -ppassword ry-vue <<SQL
+          insert into ai_provider(name, provider_type, base_url, token_cipher, enabled, timeout_seconds, create_by, create_time, remark)
+          values('AI 预览 Mock', 'OPENAI_COMPATIBLE', 'http://127.0.0.1:18080/v1', '$TOKEN_CIPHER', '0', 30, 'preview', sysdate(), '临时公网预览使用，Runner 销毁后自动消失');
+          insert into ai_model(provider_id, model_code, display_name, enabled, default_model, tool_capability, last_sync_time, create_by, create_time)
+          values(last_insert_id(), 'mock-agent-model', 'mock-agent-model', '0', '0', 'SUPPORTED', sysdate(), 'preview', sysdate());
+          SQL
+
+      - name: Build backend
+        working-directory: backend
+        run: mvn -B -DskipTests clean package
+
+      - name: Start preview mock model
+        run: |
+          cat > /tmp/mock_openai.py <<'PY'
+          import json
+          import re
+          import time
+          from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+          def call(name, args, call_id):
+              return {
+                  'role': 'assistant',
+                  'content': None,
+                  'tool_calls': [{
+                      'id': call_id,
+                      'type': 'function',
+                      'function': {'name': name, 'arguments': json.dumps(args, ensure_ascii=False)}
+                  }]
+              }
+
+          def nickname_from(text):
+              patterns = [
+                  r'昵称(?:改成|改为|修改为|修改成)\s*([^，。,.\s]+)',
+                  r'把昵称\s*(?:改成|改为)\s*([^，。,.\s]+)'
+              ]
+              for pattern in patterns:
+                  match = re.search(pattern, text or '')
+                  if match:
+                      return match.group(1)[:30]
+              return 'AI预览'
+
+          class Handler(BaseHTTPRequestHandler):
+              def log_message(self, fmt, *args):
+                  print(fmt % args, flush=True)
+
+              def send_json(self, status, obj):
+                  payload = json.dumps(obj, ensure_ascii=False).encode()
+                  self.send_response(status)
+                  self.send_header('Content-Type', 'application/json')
+                  self.send_header('Content-Length', str(len(payload)))
+                  self.end_headers()
+                  self.wfile.write(payload)
+
+              def do_GET(self):
+                  if self.path == '/v1/models':
+                      self.send_json(200, {
+                          'object': 'list',
+                          'data': [{'id':'mock-agent-model','object':'model','created':int(time.time()),'owned_by':'preview'}]
+                      })
+                  else:
+                      self.send_json(404, {'error':'not found'})
+
+              def do_POST(self):
+                  length = int(self.headers.get('Content-Length', '0'))
+                  body = json.loads(self.rfile.read(length) or b'{}')
+                  if self.path != '/v1/chat/completions':
+                      self.send_json(404, {'error':'not found'})
+                      return
+
+                  messages = body.get('messages') or []
+                  tools = body.get('tools') or []
+                  tool_names = [((tool.get('function') or {}).get('name')) for tool in tools]
+
+                  if 'ai_echo_test' in tool_names:
+                      message = call('ai_echo_test', {'value':'AI_OK'}, 'call_preview_capability')
+                      finish = 'tool_calls'
+                  elif any(name and name.startswith('page_system_user_') for name in tool_names):
+                      user_indexes = [i for i,m in enumerate(messages) if m.get('role') == 'user']
+                      start = user_indexes[-1] if user_indexes else 0
+                      current = messages[start:]
+                      user_text = next((m.get('content') or '' for m in current if m.get('role') == 'user'), '')
+                      tool_results = [m for m in current if m.get('role') == 'tool']
+                      step = len(tool_results)
+
+                      want_open = any(word in user_text for word in ['打开','编辑','修改','改成','改为','保存'])
+                      want_change = any(word in user_text for word in ['修改','改成','改为','昵称'])
+                      want_save = '保存' in user_text and '不要保存' not in user_text and '先别保存' not in user_text
+
+                      if step == 0:
+                          message = call('page_system_user_search', {'userName':'ry'}, 'call_preview_1')
+                          finish = 'tool_calls'
+                      elif step == 1 and want_open:
+                          message = call('page_system_user_edit_open', {'userId':2}, 'call_preview_2')
+                          finish = 'tool_calls'
+                      elif step == 2 and want_change:
+                          message = call('page_system_user_edit_set_fields', {'nickName': nickname_from(user_text)}, 'call_preview_3')
+                          finish = 'tool_calls'
+                      elif step == 3 and want_save:
+                          message = call('page_system_user_edit_submit', {}, 'call_preview_4')
+                          finish = 'tool_calls'
+                      else:
+                          message = {
+                              'role':'assistant',
+                              'content':'预览模型已完成这次页面操作。你也可以试试：查找用户 ry；或者“查找 ry，打开该用户，把昵称改成 AI预览，然后保存”。'
+                          }
+                          finish = 'stop'
+                  else:
+                      message = {
+                          'role':'assistant',
+                          'content':'这是临时预览环境的模拟模型。普通聊天链路已连通。进入“系统管理 → 用户管理”后，可以让我“查找用户 ry”，或让我查询、打开、修改并保存该用户。'
+                      }
+                      finish = 'stop'
+
+                  self.send_json(200, {
+                      'id':'chatcmpl-preview',
+                      'object':'chat.completion',
+                      'created':int(time.time()),
+                      'model':body.get('model','mock-agent-model'),
+                      'choices':[{'index':0,'message':message,'finish_reason':finish}],
+                      'usage':{'prompt_tokens':1,'completion_tokens':1,'total_tokens':2}
+                  })
+
+          ThreadingHTTPServer(('127.0.0.1', 18080), Handler).serve_forever()
+          PY
+          nohup python3 /tmp/mock_openai.py > /tmp/mock-openai.log 2>&1 &
+          echo $! > /tmp/mock-openai.pid
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:18080/v1/models >/tmp/mock-models.json && exit 0
+            sleep 1
+          done
+          cat /tmp/mock-openai.log
+          exit 1
+
+      - name: Start backend
+        working-directory: backend
+        env:
+          AI_MASTER_KEY: preview-only-master-key
+        run: |
+          sudo mkdir -p /home/ruoyi/logs /home/ruoyi/uploadPath
+          sudo chown -R "$USER":"$USER" /home/ruoyi
+          nohup java -jar ruoyi-admin/target/ruoyi-admin.jar > /tmp/ruoyi-backend.log 2>&1 &
+          echo $! > /tmp/ruoyi-backend.pid
+          for i in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:8080/captchaImage >/tmp/captcha.json; then
+              exit 0
+            fi
+            if ! kill -0 "$(cat /tmp/ruoyi-backend.pid)" 2>/dev/null; then
+              cat /tmp/ruoyi-backend.log
+              exit 1
+            fi
+            sleep 2
+          done
+          cat /tmp/ruoyi-backend.log
+          exit 1
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm install
+
+      - name: Allow Quick Tunnel host only in preview runtime
+        working-directory: frontend
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('vite.config.js')
+          s = p.read_text()
+          needle = '    server: {\n'
+          if needle not in s:
+              needle = '    server: {\r\n'
+          if needle not in s:
+              raise SystemExit('Could not locate Vite server config')
+          s = s.replace(needle, needle + '      allowedHosts: true,\n', 1)
+          p.write_text(s)
+          PY
+
+      - name: Start Vue3 frontend
+        working-directory: frontend
+        run: |
+          nohup npm run dev -- --host 0.0.0.0 --port 5173 > /tmp/ruoyi-frontend.log 2>&1 &
+          echo $! > /tmp/ruoyi-frontend.pid
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:5173/ >/tmp/frontend.html               && curl -fsS http://127.0.0.1:5173/dev-api/captchaImage >/tmp/frontend-captcha.json; then
+              exit 0
+            fi
+            sleep 2
+          done
+          cat /tmp/ruoyi-frontend.log
+          exit 1
+
+      - name: Install cloudflared
+        run: |
+          curl -L --fail --retry 3 -o /tmp/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+          chmod +x /tmp/cloudflared
+          /tmp/cloudflared --version
+
+      - name: Start Cloudflare Quick Tunnel
+        run: |
+          nohup /tmp/cloudflared tunnel --no-autoupdate --url http://127.0.0.1:5173 > /tmp/cloudflared.log 2>&1 &
+          echo $! > /tmp/cloudflared.pid
+          for i in $(seq 1 60); do
+            URL=$(grep -oE 'https://[-a-z0-9]+\.trycloudflare\.com' /tmp/cloudflared.log | head -n1 || true)
+            if [ -n "$URL" ]; then
+              echo "$URL" | tee /tmp/public-url.txt
+              echo "PUBLIC_PREVIEW_URL=$URL" >> "$GITHUB_ENV"
+              exit 0
+            fi
+            if ! kill -0 "$(cat /tmp/cloudflared.pid)" 2>/dev/null; then
+              cat /tmp/cloudflared.log
+              exit 1
+            fi
+            sleep 2
+          done
+          cat /tmp/cloudflared.log
+          exit 1
+
+      - name: Verify public preview
+        run: |
+          for i in $(seq 1 45); do
+            HOME_CODE=$(curl -sS -o /tmp/public-home.html -w '%{http_code}' "$PUBLIC_PREVIEW_URL/" || true)
+            API_CODE=$(curl -sS -o /tmp/public-captcha.json -w '%{http_code}' "$PUBLIC_PREVIEW_URL/dev-api/captchaImage" || true)
+            echo "Attempt $i: home=$HOME_CODE api=$API_CODE"
+            if [ "$HOME_CODE" = "200" ] && [ "$API_CODE" = "200" ]; then
+              echo "Public preview is reachable: $PUBLIC_PREVIEW_URL"
+              exit 0
+            fi
+            sleep 2
+          done
+          cat /tmp/cloudflared.log || true
+          cat /tmp/ruoyi-frontend.log || true
+          exit 1
+
+      - name: Upload preview URL and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-agent-public-preview
+          path: |
+            /tmp/public-url.txt
+            /tmp/public-captcha.json
+            /tmp/cloudflared.log
+            /tmp/ruoyi-backend.log
+            /tmp/ruoyi-frontend.log
+            /tmp/mock-openai.log
+          if-no-files-found: warn
+
+      - name: Keep preview alive
+        run: |
+          echo "Preview URL: $PUBLIC_PREVIEW_URL"
+          echo "Temporary preview will remain alive for up to 60 minutes."
+          for i in $(seq 1 60); do
+            kill -0 "$(cat /tmp/ruoyi-backend.pid)" || exit 1
+            kill -0 "$(cat /tmp/ruoyi-frontend.pid)" || exit 1
+            kill -0 "$(cat /tmp/cloudflared.pid)" || exit 1
+            sleep 60
+          done
