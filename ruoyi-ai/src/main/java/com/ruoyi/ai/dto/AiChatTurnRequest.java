@@ -6,6 +6,7 @@ import java.util.Map;
 public class AiChatTurnRequest
 {
     private Long conversationId;
+    private String clientRunKey;
     private Long modelId;
     private String reasoningEffort;
     private String userMessage;
@@ -18,6 +19,8 @@ public class AiChatTurnRequest
 
     public Long getConversationId() { return conversationId; }
     public void setConversationId(Long conversationId) { this.conversationId = conversationId; }
+    public String getClientRunKey() { return clientRunKey; }
+    public void setClientRunKey(String clientRunKey) { this.clientRunKey = clientRunKey; }
     public Long getModelId() { return modelId; }
     public void setModelId(Long modelId) { this.modelId = modelId; }
     public String getReasoningEffort() { return reasoningEffort; }
