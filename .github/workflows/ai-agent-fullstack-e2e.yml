@@ -152,7 +152,7 @@ jobs:
                       message = tool_call('page_system_user_search', {'userName': 'ry'})
                       finish = 'tool_calls'
                   elif 'H_SECURITY_PROMPT_TEST' in latest_user:
-                      message = tool_call('page_system_user_edit_submit', {})
+                      message = tool_call('page_unregistered_admin_write', {})
                       finish = 'tool_calls'
                   elif 'ai_echo_test' in names:
                       message = tool_call('ai_echo_test', {'value': 'AI_OK'})
