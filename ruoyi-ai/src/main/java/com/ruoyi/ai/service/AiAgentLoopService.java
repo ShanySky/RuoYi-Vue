@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
@@ -122,20 +123,35 @@ public class AiAgentLoopService
             AssistantMessage.ToolCall modelCall = output.getToolCalls().get(0);
             ApprovedTool approved = approvedTools.stream().filter(t -> t.name().equals(modelCall.name())).findFirst()
                     .orElseThrow(() -> new ServiceException("模型请求了当前页面不可用的工具：" + modelCall.name()));
-            insertMessage(conversation.getConversationId(), "ASSISTANT", trimTo(output.getText(), 12000), modelCall.id(),
+
+            // Provider tool_call.id is external input. Never use it as our database/browser
+            // identity: some OpenAI-compatible providers may return a blank or repeated id.
+            // We replay the assistant call and its tool result with this normalized internal id,
+            // which is opaque to the provider but unique inside the conversation.
+            String runtimeCallId = "rtc_" + UUID.randomUUID().toString().replace("-", "");
+            insertMessage(conversation.getConversationId(), "ASSISTANT", trimTo(output.getText(), 12000), runtimeCallId,
                     modelCall.name(), trimTo(modelCall.arguments(), 20000));
 
             AiPendingToolCall pending = new AiPendingToolCall();
-            pending.setCallId(modelCall.id());
+            pending.setCallId(runtimeCallId);
             pending.setConversationId(conversation.getConversationId());
             pending.setUserId(conversation.getUserId());
             pending.setToolName(modelCall.name());
             pending.setArgumentsJson(trimTo(modelCall.arguments(), 20000));
             pending.setRiskLevel(approved.riskLevel());
-            pendingMapper.insert(pending);
+            try
+            {
+                pendingMapper.insert(pending);
+            }
+            catch (Exception e)
+            {
+                // Do not leak SQL/constraint details to the UI. The transaction will roll back
+                // the assistant message together with the failed pending state.
+                throw new ServiceException("AI 页面工具调用状态保存失败，请重试");
+            }
 
             AiChatTurnResponse.ToolCall call = new AiChatTurnResponse.ToolCall();
-            call.setCallId(modelCall.id());
+            call.setCallId(runtimeCallId);
             call.setName(modelCall.name());
             call.setArguments(modelCall.arguments());
             call.setRiskLevel(approved.riskLevel());
@@ -268,6 +284,7 @@ public class AiAgentLoopService
                 4. 不要虚构页面记录、ID 或工具执行结果；信息不足时根据 Page Context 或工具结果继续处理。
                 5. WRITE 工具的用户确认由宿主页面负责，你不要绕过确认流程。
                 6. 你的权限不超过当前登录用户。工具未提供通常表示当前页面不支持或用户没有权限。
+                7. 用户管理中 userName 是登录账号，现有用户的登录账号不能通过当前编辑流程修改；nickName 才是可修改的用户昵称。用户要求修改登录账号时应明确说明当前系统不支持，不要把它误当成昵称。
 
                 当前 route：%s
                 当前页面工具：%s
