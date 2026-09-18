@@ -99,8 +99,8 @@ public class AiAgentLoopService
             selection = resolveUserSelection(request, conversation);
             AiPrompt systemPrompt = promptService.require(AiPromptService.SYSTEM);
             AiPrompt compactionPrompt = promptService.require(AiPromptService.COMPACTION);
-            run = runService.start(conversation, selection.modelId(), selection.modelCode(), selection.reasoningEffort(),
-                    systemPrompt.getVersionNo(), compactionPrompt.getVersionNo());
+            run = runService.start(conversation, request.getClientRunKey(), selection.modelId(), selection.modelCode(),
+                    selection.reasoningEffort(), systemPrompt.getVersionNo(), compactionPrompt.getVersionNo());
 
             conversationMapper.updateSelection(conversation.getConversationId(), userId, selection.modelId(),
                     selection.reasoningEffort());
