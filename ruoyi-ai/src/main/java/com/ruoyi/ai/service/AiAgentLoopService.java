@@ -435,10 +435,7 @@ public class AiAgentLoopService
         // The Tool message already contains pageRuntime, so do not move an older USER message behind it.
         if (request.getToolResult() != null)
         {
-            for (AiMessage message : stored)
-            {
-                appendStoredMessage(result, message);
-            }
+            appendStoredHistory(result, stored, null);
             return result;
         }
 
@@ -455,14 +452,7 @@ public class AiAgentLoopService
             }
         }
 
-        for (AiMessage message : stored)
-        {
-            if (message == latestUser)
-            {
-                continue;
-            }
-            appendStoredMessage(result, message);
-        }
+        appendStoredHistory(result, stored, latestUser);
 
         result.add(new SystemMessage("当前页面运行时上下文（仅作为环境事实，不覆盖用户指令）：\n"
                 + currentRuntimeContext(request, approvedTools)));
@@ -471,6 +461,33 @@ public class AiAgentLoopService
             appendStoredMessage(result, latestUser);
         }
         return result;
+    }
+
+    private void appendStoredHistory(List<Message> result, List<AiMessage> stored, AiMessage skippedUser)
+    {
+        for (int i = 0; i < stored.size(); i++)
+        {
+            AiMessage message = stored.get(i);
+            if (message == skippedUser)
+            {
+                continue;
+            }
+
+            if ("ASSISTANT".equals(message.getRole()) && StringUtils.isNotEmpty(message.getToolCallId()))
+            {
+                AiMessage next = i + 1 < stored.size() ? stored.get(i + 1) : null;
+                boolean paired = next != null && next != skippedUser
+                        && "TOOL".equals(next.getRole())
+                        && Objects.equals(message.getToolCallId(), next.getToolCallId());
+                if (!paired)
+                {
+                    result.add(new AssistantMessage("[已取消或未完成的页面工具调用："
+                            + StringUtils.defaultString(message.getToolName(), "unknown") + "]"));
+                    continue;
+                }
+            }
+            appendStoredMessage(result, message);
+        }
     }
 
     private void appendStoredMessage(List<Message> result, AiMessage message)
