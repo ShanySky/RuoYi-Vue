@@ -113,6 +113,60 @@ select 'COMPACTION',
 2, '0', 'system', sysdate()
 where not exists (select 1 from ai_prompt where prompt_type='COMPACTION');
 
-insert into ai_page_config(route, page_name, enabled, create_by, create_time)
-select '/system/user', '用户管理', '0', 'system', sysdate()
-where not exists (select 1 from ai_page_config where route='/system/user');
+-- H/F: 系统页面能力白名单；0=启用。动态 ID 路由使用 *。
+insert into ai_page_config(route,page_name,enabled,create_by,create_time) values
+('/system/user','用户管理','0','system',sysdate()),
+('/system/user-auth/role/*','分配角色','0','system',sysdate()),
+('/system/role','角色管理','0','system',sysdate()),
+('/system/role-auth/user/*','角色分配用户','0','system',sysdate()),
+('/system/menu','菜单管理','0','system',sysdate()),
+('/system/dept','部门管理','0','system',sysdate()),
+('/system/post','岗位管理','0','system',sysdate()),
+('/system/dict','字典类型','0','system',sysdate()),
+('/system/dict-data/index/*','字典数据','0','system',sysdate()),
+('/system/notice','通知公告','0','system',sysdate()),
+('/user/profile','个人中心','0','system',sysdate()),
+('/monitor/online','在线用户','0','system',sysdate()),
+('/monitor/job','定时任务','0','system',sysdate()),
+('/monitor/job-log/index/*','调度日志','0','system',sysdate()),
+('/monitor/logininfor','登录日志','0','system',sysdate()),
+('/monitor/operlog','操作日志','0','system',sysdate()),
+('/monitor/cache','缓存监控','0','system',sysdate()),
+('/monitor/cacheList','缓存列表','0','system',sysdate()),
+('/monitor/server','服务监控','0','system',sysdate()),
+('/monitor/druid','数据监控','0','system',sysdate()),
+('/tool/gen','代码生成','0','system',sysdate()),
+('/tool/gen-edit/index/*','修改生成配置','0','system',sysdate()),
+('/tool/build','表单构建','0','system',sysdate()),
+('/tool/swagger','系统接口','0','system',sysdate())
+on duplicate key update page_name=values(page_name);
+
+-- H: 会话策略复用 RuoYi 系统参数。
+insert into sys_config(config_name,config_key,config_value,config_type,create_by,create_time,remark)
+select 'AI 会话保留天数','ai.conversation.retentionDays','90','Y','system',sysdate(),'超过保留期且无活动 Run 的会话由 AI 清理任务物理清理'
+where not exists(select 1 from sys_config where config_key='ai.conversation.retentionDays');
+insert into sys_config(config_name,config_key,config_value,config_type,create_by,create_time,remark)
+select 'AI 用户允许归档会话','ai.conversation.userArchiveEnabled','true','Y','system',sysdate(),'用户是否可将自己的会话归档'
+where not exists(select 1 from sys_config where config_key='ai.conversation.userArchiveEnabled');
+insert into sys_config(config_name,config_key,config_value,config_type,create_by,create_time,remark)
+select 'AI 用户允许删除会话','ai.conversation.userDeleteEnabled','false','Y','system',sysdate(),'用户删除为软删除；到保留期后由系统物理清理'
+where not exists(select 1 from sys_config where config_key='ai.conversation.userDeleteEnabled');
+
+-- H: 从第二阶段“系统管理 / AI 配置”迁移到一级“AI 管理”，并保留隐藏兼容路由。
+insert ignore into sys_menu values(2000,'AI 管理',0,4,'ai',null,'','',1,0,'M','0','0','','skill','admin',sysdate(),'',null,'AI 系统管理目录');
+update sys_menu set menu_name='AI 服务',parent_id=2000,order_num=1,path='service',component='ai/service/index',perms='ai:config:view',remark='AI Provider 配置' where menu_id=118;
+insert ignore into sys_menu values(119,'模型管理',2000,2,'models','ai/models/index','','',1,0,'C','0','0','ai:config:view','list','admin',sysdate(),'',null,'AI 系统模型管理');
+insert ignore into sys_menu values(120,'提示词管理',2000,3,'prompts','ai/prompts/index','','',1,0,'C','0','0','ai:prompt:view','edit','admin',sysdate(),'',null,'System/Compaction Prompt 管理');
+insert ignore into sys_menu values(121,'页面能力',2000,4,'pages','ai/pages/index','','',1,0,'C','0','0','ai:page:view','tree-table','admin',sysdate(),'',null,'AI 页面接入能力管理');
+insert ignore into sys_menu values(122,'会话策略',2000,5,'policy','ai/policy/index','','',1,0,'C','0','0','ai:policy:view','time-range','admin',sysdate(),'',null,'AI 会话保留与用户操作策略');
+insert ignore into sys_menu values(123,'会话审计',2000,6,'audit','ai/audit/index','','',1,0,'C','0','0','ai:conversation:audit','form','admin',sysdate(),'',null,'只读 AI 会话审计');
+insert ignore into sys_menu values(124,'AI 配置兼容入口',1,99,'aiConfig','ai/config/index','','',1,0,'C','1','0','ai:config:view','#','admin',sysdate(),'',null,'兼容第二阶段 /system/aiConfig 路由，不在菜单显示');
+update sys_menu set parent_id=118 where menu_id in (1061,1062);
+insert ignore into sys_menu values(2101,'Prompt 查看',120,1,'#','','','',1,0,'F','0','0','ai:prompt:view','#','admin',sysdate(),'',null,'');
+insert ignore into sys_menu values(2102,'Prompt 修改',120,2,'#','','','',1,0,'F','0','0','ai:prompt:edit','#','admin',sysdate(),'',null,'');
+insert ignore into sys_menu values(2103,'页面能力查看',121,1,'#','','','',1,0,'F','0','0','ai:page:view','#','admin',sysdate(),'',null,'');
+insert ignore into sys_menu values(2104,'页面能力修改',121,2,'#','','','',1,0,'F','0','0','ai:page:edit','#','admin',sysdate(),'',null,'');
+insert ignore into sys_menu values(2105,'会话策略查看',122,1,'#','','','',1,0,'F','0','0','ai:policy:view','#','admin',sysdate(),'',null,'');
+insert ignore into sys_menu values(2106,'会话策略修改',122,2,'#','','','',1,0,'F','0','0','ai:policy:edit','#','admin',sysdate(),'',null,'');
+insert ignore into sys_menu values(2107,'会话审计查看',123,1,'#','','','',1,0,'F','0','0','ai:conversation:audit','#','admin',sysdate(),'',null,'');
+insert ignore into sys_menu values(2108,'模型配置修改',119,1,'#','','','',1,0,'F','0','0','ai:config:edit','#','admin',sysdate(),'',null,'');
