@@ -197,6 +197,9 @@ jobs:
                           'content': 'WRITE_CANCELLED_BY_STEERING' if ('rows' in tool_history and 'ry' in tool_history)
                               else 'STEERING_HISTORY_MISSING'
                       }
+                  elif 'RISK_POLICY_RESET_PASSWORD' in latest_user:
+                      message = tool_call('page_system_user_reset_password', {'userId': 2, 'password': 'ShouldNotExecute123!'})
+                      finish = 'tool_calls'
                   elif latest_user.startswith('UI_COMPACT_'):
                       message = {
                           'role': 'assistant',
