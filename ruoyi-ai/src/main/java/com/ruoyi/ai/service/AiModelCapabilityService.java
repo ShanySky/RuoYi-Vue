@@ -56,6 +56,34 @@ public class AiModelCapabilityService
         return capability;
     }
 
+    public String testReasoning(Long modelId)
+    {
+        AiAgentModelFactory.ModelRuntime runtime = modelFactory.create(modelId, List.of(), "low");
+        try
+        {
+            ChatResponse response = runtime.chatModel().call(new Prompt(
+                    "Reply with exactly AI_OK.", runtime.options()));
+            if (response == null || response.getResult() == null || response.getResult().getOutput() == null)
+            {
+                throw new ServiceException("思考能力测试未返回有效响应");
+            }
+        }
+        catch (ServiceException e)
+        {
+            throw e;
+        }
+        catch (Exception e)
+        {
+            throw new ServiceException("思考能力测试失败：" + safeMessage(e));
+        }
+
+        AiModel model = runtime.model();
+        model.setReasoningCapability(AiConfigService.CAPABILITY_SUPPORTED);
+        model.setUpdateBy(SecurityUtils.getUsername());
+        modelMapper.updateReasoningCapability(model);
+        return model.getReasoningCapability();
+    }
+
     private String safeMessage(Exception e)
     {
         String value = e.getMessage();
