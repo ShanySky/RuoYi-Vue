@@ -1,6 +1,6 @@
 name: AI Agent Public Preview
 
-# Phase-two final manual preview refreshes the current frontend branch head.
+# Phase-three final manual preview refreshes the current frontend branch head.
 
 on:
   push:
@@ -50,6 +50,13 @@ jobs:
           repository: ShanySky/RuoYi-Vue3
           ref: chatgpt/ai-agent-assistant
           path: frontend
+
+      - name: Record preview revisions
+        run: |
+          {
+            echo "BACKEND_SHA=$(git -C backend rev-parse HEAD)"
+            echo "FRONTEND_SHA=$(git -C frontend rev-parse HEAD)"
+          } | tee /tmp/preview-revisions.txt
 
       - name: Set up Java 17
         uses: actions/setup-java@v5
@@ -108,7 +115,7 @@ jobs:
           values('AI 预览 Mock', 'OPENAI_COMPATIBLE', 'http://127.0.0.1:18080/v1', '$TOKEN_CIPHER', '0', 30, 'preview', sysdate(), '临时公网预览使用，Runner 销毁后自动消失');
           set @provider_id = last_insert_id();
           insert into ai_model(provider_id, model_code, display_name, enabled, default_model, tool_capability, reasoning_capability, reasoning_efforts, default_reasoning_effort, last_sync_time, create_by, create_time)
-          values(@provider_id, 'mock-agent-model', 'mock-agent-model', '0', '0', 'SUPPORTED', 'SUPPORTED', 'minimal,low,medium,high,xhigh', 'high', sysdate(), 'preview', sysdate());
+          values(@provider_id, 'mock-agent-model', 'mock-agent-model', '0', '0', 'SUPPORTED', 'SUPPORTED', 'none,low,medium,high,xhigh,max', 'high', sysdate(), 'preview', sysdate());
           SQL
 
       - name: Build backend
@@ -359,6 +366,7 @@ jobs:
           name: ai-agent-public-preview
           path: |
             /tmp/public-url.txt
+            /tmp/preview-revisions.txt
             /tmp/public-captcha.json
             /tmp/cloudflared.log
             /tmp/ruoyi-backend.log
