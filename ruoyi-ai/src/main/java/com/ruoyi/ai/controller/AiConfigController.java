@@ -51,10 +51,10 @@ public class AiConfigController
     }
 
     @PreAuthorize("@ss.hasPermi('ai:config:edit')")
-    @PostMapping("/provider/test")
-    public AjaxResult testProvider(@RequestBody AiProviderSaveRequest request)
+    @PostMapping("/provider/test-model-load")
+    public AjaxResult testModelLoad(@RequestBody AiProviderSaveRequest request)
     {
-        return AjaxResult.success(configService.testConnection(request));
+        return AjaxResult.success(configService.testModelLoad(request));
     }
 
     @PreAuthorize("@ss.hasPermi('ai:config:edit')")
