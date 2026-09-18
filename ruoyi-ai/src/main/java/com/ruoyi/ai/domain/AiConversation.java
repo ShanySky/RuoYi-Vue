@@ -7,6 +7,7 @@ public class AiConversation
     private Long conversationId;
     private Long userId;
     private Long modelId;
+    private String reasoningEffort;
     private String title;
     private String route;
     private String status;
@@ -19,6 +20,8 @@ public class AiConversation
     public void setUserId(Long userId) { this.userId = userId; }
     public Long getModelId() { return modelId; }
     public void setModelId(Long modelId) { this.modelId = modelId; }
+    public String getReasoningEffort() { return reasoningEffort; }
+    public void setReasoningEffort(String reasoningEffort) { this.reasoningEffort = reasoningEffort; }
     public String getTitle() { return title; }
     public void setTitle(String title) { this.title = title; }
     public String getRoute() { return route; }
