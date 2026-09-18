@@ -82,14 +82,15 @@ jobs:
           cat > /tmp/mock_openai.py <<'PY'
           import json
           import time
+          import uuid
           from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-          def tool_call(name, args, call_id):
+          def tool_call(name, args):
               return {
                   'role': 'assistant',
                   'content': None,
                   'tool_calls': [{
-                      'id': call_id,
+                      'id': 'call_' + uuid.uuid4().hex,
                       'type': 'function',
                       'function': {'name': name, 'arguments': json.dumps(args, ensure_ascii=False)}
                   }]
@@ -134,22 +135,22 @@ jobs:
                   finish = 'stop'
 
                   if 'ai_echo_test' in names:
-                      message = tool_call('ai_echo_test', {'value': 'AI_OK'}, 'call_capability_1')
+                      message = tool_call('ai_echo_test', {'value': 'AI_OK'})
                       finish = 'tool_calls'
                   elif any(name and name.startswith('page_system_user_') for name in names):
                       tool_results = [msg for msg in messages if msg.get('role') == 'tool']
                       step = len(tool_results)
                       if step == 0:
-                          message = tool_call('page_system_user_search', {'userName': 'ry'}, 'call_e2e_1')
+                          message = tool_call('page_system_user_search', {'userName': 'ry'})
                           finish = 'tool_calls'
                       elif step == 1:
-                          message = tool_call('page_system_user_edit_open', {'userId': 2}, 'call_e2e_2')
+                          message = tool_call('page_system_user_edit_open', {'userId': 2})
                           finish = 'tool_calls'
                       elif step == 2:
-                          message = tool_call('page_system_user_edit_set_fields', {'nickName': 'AI闭环测试'}, 'call_e2e_3')
+                          message = tool_call('page_system_user_edit_set_fields', {'nickName': 'AI闭环测试'})
                           finish = 'tool_calls'
                       elif step == 3:
-                          message = tool_call('page_system_user_edit_submit', {}, 'call_e2e_4')
+                          message = tool_call('page_system_user_edit_submit', {})
                           finish = 'tool_calls'
                       else:
                           message = {'role': 'assistant', 'content': 'E2E_DONE'}
