@@ -115,6 +115,7 @@ where not exists (select 1 from sys_menu where menu_id=1062);
 
 create table if not exists ai_run (
   run_id                    bigint(20)   not null auto_increment,
+  client_run_key            varchar(64)  not null,
   conversation_id           bigint(20)   not null,
   user_id                   bigint(20)   not null,
   model_id                  bigint(20)   not null,
@@ -133,6 +134,7 @@ create table if not exists ai_run (
   update_time               datetime     default null,
   end_time                  datetime     default null,
   primary key (run_id),
+  unique key uk_ai_run_client_key (client_run_key),
   key idx_ai_run_conversation_status (conversation_id, status),
   key idx_ai_run_user_time (user_id, create_time)
 ) engine=innodb comment='AI Agent Run';
