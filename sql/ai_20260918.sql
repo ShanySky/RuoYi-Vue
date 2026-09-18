@@ -103,21 +103,24 @@ create table if not exists ai_pending_tool_call (
 insert into sys_menu(menu_id,menu_name,parent_id,order_num,path,component,route_name,query,is_frame,is_cache,menu_type,visible,status,perms,icon,create_by,create_time,update_by,update_time,remark)
 select 2000,'AI 管理',0,4,'ai',null,'','',1,0,'M','0','0','','skill','admin',sysdate(),'',null,'AI 系统管理目录' where not exists(select 1 from sys_menu where menu_id=2000);
 insert into sys_menu(menu_id,menu_name,parent_id,order_num,path,component,route_name,query,is_frame,is_cache,menu_type,visible,status,perms,icon,create_by,create_time,update_by,update_time,remark)
-select 118,'AI 服务',2000,1,'service','ai/config/index','','',1,0,'C','0','0','ai:config:view','connection','admin',sysdate(),'',null,'AI Provider 配置' where not exists(select 1 from sys_menu where menu_id=118);
-update sys_menu set menu_name='AI 服务',parent_id=2000,order_num=1,path='service',component='ai/config/index',perms='ai:config:view',remark='AI Provider 配置' where menu_id=118;
-insert into sys_menu values(119,'模型管理',2000,2,'models','ai/models/index','','',1,0,'C','0','0','ai:config:view','list','admin',sysdate(),'',null,'AI 系统模型管理');
-insert into sys_menu values(120,'提示词管理',2000,3,'prompts','ai/prompts/index','','',1,0,'C','0','0','ai:prompt:view','edit','admin',sysdate(),'',null,'System/Compaction Prompt 管理');
-insert into sys_menu values(121,'页面能力',2000,4,'pages','ai/pages/index','','',1,0,'C','0','0','ai:page:view','tree-table','admin',sysdate(),'',null,'AI 页面接入能力管理');
-insert into sys_menu values(122,'会话策略',2000,5,'policy','ai/policy/index','','',1,0,'C','0','0','ai:policy:view','time-range','admin',sysdate(),'',null,'AI 会话保留与用户操作策略');
-insert into sys_menu values(123,'会话审计',2000,6,'audit','ai/audit/index','','',1,0,'C','0','0','ai:conversation:audit','form','admin',sysdate(),'',null,'只读 AI 会话审计');
+select 118,'AI 服务',2000,1,'service','ai/service/index','','',1,0,'C','0','0','ai:config:view','connection','admin',sysdate(),'',null,'AI Provider 配置' where not exists(select 1 from sys_menu where menu_id=118);
+update sys_menu set menu_name='AI 服务',parent_id=2000,order_num=1,path='service',component='ai/service/index',perms='ai:config:view',remark='AI Provider 配置' where menu_id=118;
+insert ignore into sys_menu values(119,'模型管理',2000,2,'models','ai/models/index','','',1,0,'C','0','0','ai:config:view','list','admin',sysdate(),'',null,'AI 系统模型管理');
+insert ignore into sys_menu values(120,'提示词管理',2000,3,'prompts','ai/prompts/index','','',1,0,'C','0','0','ai:prompt:view','edit','admin',sysdate(),'',null,'System/Compaction Prompt 管理');
+insert ignore into sys_menu values(121,'页面能力',2000,4,'pages','ai/pages/index','','',1,0,'C','0','0','ai:page:view','tree-table','admin',sysdate(),'',null,'AI 页面接入能力管理');
+insert ignore into sys_menu values(122,'会话策略',2000,5,'policy','ai/policy/index','','',1,0,'C','0','0','ai:policy:view','time-range','admin',sysdate(),'',null,'AI 会话保留与用户操作策略');
+insert ignore into sys_menu values(123,'会话审计',2000,6,'audit','ai/audit/index','','',1,0,'C','0','0','ai:conversation:audit','form','admin',sysdate(),'',null,'只读 AI 会话审计');
 update sys_menu set parent_id=118 where menu_id in (1061,1062);
-insert into sys_menu values(2101,'Prompt 查看',120,1,'#','','','',1,0,'F','0','0','ai:prompt:view','#','admin',sysdate(),'',null,'');
-insert into sys_menu values(2102,'Prompt 修改',120,2,'#','','','',1,0,'F','0','0','ai:prompt:edit','#','admin',sysdate(),'',null,'');
-insert into sys_menu values(2103,'页面能力查看',121,1,'#','','','',1,0,'F','0','0','ai:page:view','#','admin',sysdate(),'',null,'');
-insert into sys_menu values(2104,'页面能力修改',121,2,'#','','','',1,0,'F','0','0','ai:page:edit','#','admin',sysdate(),'',null,'');
-insert into sys_menu values(2105,'会话策略查看',122,1,'#','','','',1,0,'F','0','0','ai:policy:view','#','admin',sysdate(),'',null,'');
-insert into sys_menu values(2106,'会话策略修改',122,2,'#','','','',1,0,'F','0','0','ai:policy:edit','#','admin',sysdate(),'',null,'');
-insert into sys_menu values(2107,'会话审计查看',123,1,'#','','','',1,0,'F','0','0','ai:conversation:audit','#','admin',sysdate(),'',null,'');
+insert ignore into sys_menu values(124,'AI 配置兼容入口',1,99,'aiConfig','ai/config/index','','',1,0,'C','1','0','ai:config:view','#','admin',sysdate(),'',null,'兼容第二阶段 /system/aiConfig 路由，不在菜单显示');
+insert ignore into sys_menu values(2108,'模型配置修改',119,1,'#','','','',1,0,'F','0','0','ai:config:edit','#','admin',sysdate(),'',null,'');
+
+insert ignore into sys_menu values(2101,'Prompt 查看',120,1,'#','','','',1,0,'F','0','0','ai:prompt:view','#','admin',sysdate(),'',null,'');
+insert ignore into sys_menu values(2102,'Prompt 修改',120,2,'#','','','',1,0,'F','0','0','ai:prompt:edit','#','admin',sysdate(),'',null,'');
+insert ignore into sys_menu values(2103,'页面能力查看',121,1,'#','','','',1,0,'F','0','0','ai:page:view','#','admin',sysdate(),'',null,'');
+insert ignore into sys_menu values(2104,'页面能力修改',121,2,'#','','','',1,0,'F','0','0','ai:page:edit','#','admin',sysdate(),'',null,'');
+insert ignore into sys_menu values(2105,'会话策略查看',122,1,'#','','','',1,0,'F','0','0','ai:policy:view','#','admin',sysdate(),'',null,'');
+insert ignore into sys_menu values(2106,'会话策略修改',122,2,'#','','','',1,0,'F','0','0','ai:policy:edit','#','admin',sysdate(),'',null,'');
+insert ignore into sys_menu values(2107,'会话审计查看',123,1,'#','','','',1,0,'F','0','0','ai:conversation:audit','#','admin',sysdate(),'',null,'');
 
 create table if not exists ai_run (
   run_id                    bigint(20)   not null auto_increment,
