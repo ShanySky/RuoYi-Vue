@@ -81,6 +81,24 @@ public class AiFrontendToolPolicy
         allowlist.put("page_system_user_edit_submit", new ToolPolicy(
                 "WRITE", "system:user:edit", "提交当前用户编辑表单并真实写入系统",
                 objectSchema(Map.of(), List.of())));
+        allowlist.put("page_system_role_add_submit", new ToolPolicy(
+                "DANGEROUS_WRITE", "system:role:add", "创建新角色并写入角色权限配置",
+                objectSchema(Map.of(), List.of())));
+        allowlist.put("page_system_role_edit_submit", new ToolPolicy(
+                "DANGEROUS_WRITE", "system:role:edit", "保存角色配置修改；可能影响系统权限边界",
+                objectSchema(Map.of(), List.of())));
+        allowlist.put("page_system_user_auth_role_view", new ToolPolicy(
+                "READ", "system:user:query", "查看指定用户当前可分配角色及已授权角色",
+                objectSchema(Map.of(), List.of())));
+        allowlist.put("page_system_user_auth_role_select", new ToolPolicy(
+                "UI", "system:user:edit", "在分配角色页面选择准备授予用户的角色，但不保存",
+                objectSchema(Map.of(
+                        "roleIds", Map.of("type", "array", "items", Map.of("type", "integer"),
+                                "description", "准备授予用户的角色ID列表")),
+                        List.of("roleIds"))));
+        allowlist.put("page_system_user_auth_role_submit", new ToolPolicy(
+                "DANGEROUS_WRITE", "system:user:edit", "提交用户角色授权；会改变该用户实际权限",
+                objectSchema(Map.of(), List.of())));
     }
 
     public List<ApprovedTool> approve(List<AiFrontendToolDefinition> requested)
