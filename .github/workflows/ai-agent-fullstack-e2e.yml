@@ -162,6 +162,12 @@ jobs:
 
                   if 'H_COMPACTION_PROMPT_MARKER' in system_text:
                       message = {'role': 'assistant', 'content': 'H_COMPACTION_APPLIED'}
+                  elif latest_user.startswith('需要压缩的后续历史：'):
+                      time.sleep(1.2)
+                      message = {
+                          'role': 'assistant',
+                          'content': 'DEFAULT_COMPACTION_APPLIED\n## 任务主线\n- 当前主题：UI_COMPACTION\n- 最终目标：压缩后继续当前任务\n## 待办与下一步\n- 下一步：继续最新用户指令'
+                      }
                   elif 'H_SYSTEM_PROMPT_MARKER' in system_text and 'H_PROMPT_APPLY' in latest_user:
                       message = {'role': 'assistant', 'content': 'H_SYSTEM_PROMPT_APPLIED'}
                   elif 'H_PAGE_DISABLED_TOOL' in latest_user:
