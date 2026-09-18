@@ -13,7 +13,7 @@ on:
 jobs:
   preview:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 60
 
     services:
       mysql:
@@ -303,7 +303,7 @@ jobs:
         run: |
           nohup npm run dev -- --host 0.0.0.0 --port 5173 > /tmp/ruoyi-frontend.log 2>&1 &
           echo $! > /tmp/ruoyi-frontend.pid
-          for i in $(seq 1 60); do
+          for i in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:5173/ >/tmp/frontend.html               && curl -fsS http://127.0.0.1:5173/dev-api/captchaImage >/tmp/frontend-captcha.json; then
               exit 0
             fi
@@ -371,7 +371,7 @@ jobs:
       - name: Keep preview alive
         run: |
           echo "Preview URL: $PUBLIC_PREVIEW_URL"
-          echo "Temporary preview will remain alive for up to 60 minutes."
+          echo "Temporary preview will remain alive for up to 30 minutes."
           for i in $(seq 1 60); do
             kill -0 "$(cat /tmp/ruoyi-backend.pid)" || exit 1
             kill -0 "$(cat /tmp/ruoyi-frontend.pid)" || exit 1
