@@ -1,6 +1,6 @@
 name: AI Agent Public Preview
 
-# Phase-three final manual preview refreshes the current frontend branch head.
+# Phase-three final manual preview refresh after steering-concurrency and full user-capability acceptance.
 
 on:
   push:
