@@ -114,7 +114,7 @@ jobs:
                   self.send_json(200, {
                       'id':'chatcmpl-ci','object':'chat.completion','created':int(time.time()),'model':body.get('model','mock-agent-model'),
                       'choices':[{'index':0,'message':message,'finish_reason':finish}],
-                      'usage':{'prompt_tokens':1,'completion_tokens':1,'total_tokens':2}
+                      'usage':{'prompt_tokens':8,'completion_tokens':1,'total_tokens':9,'prompt_tokens_details':{'cached_tokens':4}}
                   })
 
           ThreadingHTTPServer(('127.0.0.1', 18080), Handler).serve_forever()
