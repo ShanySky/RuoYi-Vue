@@ -4,7 +4,7 @@ import java.util.Date;
 import com.ruoyi.common.core.domain.BaseEntity;
 
 /**
- * Model discovered from an AI Provider.
+ * AI model explicitly selected into the RuoYi system.
  */
 public class AiModel extends BaseEntity
 {
