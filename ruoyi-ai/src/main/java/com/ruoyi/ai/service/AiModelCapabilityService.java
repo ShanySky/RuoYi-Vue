@@ -1,7 +1,9 @@
 package com.ruoyi.ai.service;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.stereotype.Service;
@@ -59,8 +61,27 @@ public class AiModelCapabilityService
 
     public String testReasoning(Long modelId)
     {
+        // First prove that the model itself is callable without any reasoning option.
+        // If this fails, UNKNOWN is more honest than classifying the model as unsupported.
+        try
+        {
+            AiAgentModelFactory.ModelRuntime base = modelFactory.create(modelId, List.of());
+            ChatResponse response = base.chatModel().call(new Prompt("Reply with exactly AI_OK.", base.options()));
+            if (response == null || response.getResult() == null || response.getResult().getOutput() == null)
+            {
+                throw new ServiceException("模型基础调用未返回有效响应");
+            }
+        }
+        catch (ServiceException e)
+        {
+            throw e;
+        }
+        catch (Exception e)
+        {
+            throw new ServiceException("思考能力检测前的模型基础调用失败：" + safeMessage(e));
+        }
+
         List<String> supported = new ArrayList<>();
-        String lastError = null;
         for (String effort : List.of("minimal", "low", "medium", "high", "xhigh"))
         {
             try
@@ -72,23 +93,67 @@ public class AiModelCapabilityService
                     supported.add(effort);
                 }
             }
-            catch (Exception e)
+            catch (Exception ignored)
             {
-                lastError = safeMessage(e);
+                // Unsupported reasoning values are expected for many compatible providers.
             }
         }
 
+        AiModel model = modelFactory.create(modelId, List.of()).model();
         if (supported.isEmpty())
         {
-            throw new ServiceException("思考能力测试未发现可用档位" + (lastError == null ? "" : "：" + lastError));
+            model.setReasoningCapability(AiConfigService.CAPABILITY_UNSUPPORTED);
+            model.setReasoningEfforts(null);
         }
-
-        AiModel model = modelFactory.create(modelId, List.of()).model();
-        model.setReasoningCapability(AiConfigService.CAPABILITY_SUPPORTED);
-        model.setReasoningEfforts(String.join(",", supported));
+        else
+        {
+            model.setReasoningCapability(AiConfigService.CAPABILITY_SUPPORTED);
+            model.setReasoningEfforts(String.join(",", supported));
+        }
         model.setUpdateBy(SecurityUtils.getUsername());
         modelMapper.updateReasoningCapability(model);
-        return model.getReasoningEfforts();
+        return supported.isEmpty() ? AiConfigService.CAPABILITY_UNSUPPORTED : model.getReasoningEfforts();
+    }
+
+    public Map<String, Object> detectCapabilities(Long modelId)
+    {
+        Map<String, Object> result = new LinkedHashMap<>();
+        String toolError = null;
+        String reasoningError = null;
+        try
+        {
+            result.put("toolCapability", testToolCalling(modelId));
+        }
+        catch (Exception e)
+        {
+            result.put("toolCapability", AiConfigService.CAPABILITY_UNKNOWN);
+            toolError = safeMessage(e);
+        }
+
+        try
+        {
+            String reasoning = testReasoning(modelId);
+            AiModel model = modelFactory.create(modelId, List.of()).model();
+            result.put("reasoningCapability", model.getReasoningCapability());
+            result.put("reasoningEfforts", model.getReasoningEfforts());
+            result.put("reasoningResult", reasoning);
+        }
+        catch (Exception e)
+        {
+            result.put("reasoningCapability", AiConfigService.CAPABILITY_UNKNOWN);
+            result.put("reasoningEfforts", null);
+            reasoningError = safeMessage(e);
+        }
+
+        if (toolError != null)
+        {
+            result.put("toolError", toolError);
+        }
+        if (reasoningError != null)
+        {
+            result.put("reasoningError", reasoningError);
+        }
+        return result;
     }
 
     private String safeMessage(Exception e)
