@@ -156,6 +156,10 @@ jobs:
                   system_text = '\n'.join(str(msg.get('content') or '') for msg in messages if msg.get('role') == 'system')
                   finish = 'stop'
 
+                  if latest_user == 'Reply with exactly AI_OK.' and body.get('model') == 'mock-agent-model' and body.get('reasoning_effort') == 'minimal':
+                      self.send_json(400, {'error': {'message': 'Unsupported reasoning_effort: minimal'}})
+                      return
+
                   if 'H_COMPACTION_PROMPT_MARKER' in system_text:
                       message = {'role': 'assistant', 'content': 'H_COMPACTION_APPLIED'}
                   elif 'H_SYSTEM_PROMPT_MARKER' in system_text and 'H_PROMPT_APPLY' in latest_user:
@@ -181,7 +185,12 @@ jobs:
                   elif 'STEER_NEW' in latest_user:
                       message = {'role': 'assistant', 'content': 'STEER_NEW_OK'}
                   elif 'STEER_CANCEL_WRITE' in latest_user:
-                      message = {'role': 'assistant', 'content': 'WRITE_CANCELLED_BY_STEERING'}
+                      tool_history = '\n'.join(str(msg.get('content') or '') for msg in messages if msg.get('role') == 'tool')
+                      message = {
+                          'role': 'assistant',
+                          'content': 'WRITE_CANCELLED_BY_STEERING' if ('rows' in tool_history and 'ry' in tool_history)
+                              else 'STEERING_HISTORY_MISSING'
+                      }
                   elif 'CROSS_PAGE_ROLE_ASSIGN' in latest_user:
                       tool_results = [msg for msg in messages if msg.get('role') == 'tool']
                       step = len(tool_results)
