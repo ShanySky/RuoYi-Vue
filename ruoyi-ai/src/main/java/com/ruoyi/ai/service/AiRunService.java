@@ -18,7 +18,12 @@ public class AiRunService {
  public void complete(Long runId){runs.complete(runId);inFlight.remove(runId);}
  public void fail(Long runId,String reason){runs.fail(runId,reason);inFlight.remove(runId);}
  public AiRun cancel(Long runId,Long userId,String reason){requireOwned(runId,userId);runs.updateOwnedState(runId,userId,"CANCELLED",reason);pending.cancelByRun(runId,"CANCELLED");Future<?> f=inFlight.remove(runId);if(f!=null)f.cancel(true);return runs.selectById(runId);} public AiRun cancelByClientKey(String key,Long userId,String reason){AiRun r=byClientKey(key,userId);return cancel(r.getRunId(),userId,reason);}
- public ChatResponse call(Long runId,Callable<ChatResponse> action) throws Exception {Future<ChatResponse> f=executor.submit(action);inFlight.put(runId,f);try{return f.get();}catch(CancellationException e){throw new InterruptedException("run cancelled");}finally{inFlight.remove(runId,f);}}
+ public ChatResponse call(Long runId,Callable<ChatResponse> action) throws Exception {
+  if(!runnable(runId))throw new InterruptedException("run is not active");
+  Future<ChatResponse> f=executor.submit(action);inFlight.put(runId,f);
+  if(!runnable(runId)){f.cancel(true);inFlight.remove(runId,f);throw new InterruptedException("run cancelled before model call");}
+  try{return f.get();}catch(CancellationException e){throw new InterruptedException("run cancelled");}finally{inFlight.remove(runId,f);}
+ }
  public void recordUsage(Long runId,ChatResponse response){if(response==null||response.getMetadata()==null||response.getMetadata().getUsage()==null)return;Object u=response.getMetadata().getUsage();long input=read(u,"getPromptTokens","getInputTokens");long read=read(u,"getCacheReadInputTokens");long write=read(u,"getCacheWriteInputTokens");long total=read(u,"getTotalTokens");runs.updateUsage(runId,input,read,write,total);}
  private String normalizeClientRunKey(String key){String value=key==null?"":key.trim();if(value.isEmpty())value=java.util.UUID.randomUUID().toString();if(value.length()>64)throw new ServiceException("clientRunKey 过长");return value;}
  private long read(Object target,String... names){for(String n:names)try{Method m=target.getClass().getMethod(n);Object v=m.invoke(target);if(v instanceof Number x)return x.longValue();}catch(Exception ignored){}return 0;}
