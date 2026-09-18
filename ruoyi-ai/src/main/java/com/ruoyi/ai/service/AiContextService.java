@@ -19,6 +19,7 @@ public class AiContextService {
   try{
    var runtime=models.create(model.getModelId(),List.of(),reasoningEffort,"ruoyi:compaction:"+conversation.getConversationId());
    ChatResponse response=runs.call(run.getRunId(),()->runtime.chatModel().call(new Prompt(List.of(new SystemMessage(cpPrompt.getContent()),new UserMessage(payload.toString())),runtime.options())));
+   runs.recordUsage(run.getRunId(),response);
    if(response==null||response.getResult()==null||response.getResult().getOutput()==null||StringUtils.isBlank(response.getResult().getOutput().getText()))throw new ServiceException("上下文压缩未返回有效 Checkpoint");
    AiCheckpoint cp=new AiCheckpoint();cp.setConversationId(conversation.getConversationId());cp.setRunId(run.getRunId());cp.setCoveredSequenceNo(cutoff);cp.setSummary(response.getResult().getOutput().getText().trim());cp.setModelId(model.getModelId());cp.setModelCode(model.getModelCode());cp.setEstimatedTokens(estimate);cp.setStatus("ACTIVE");checkpoints.insert(cp);return cp;
   }catch(InterruptedException e){Thread.interrupted();return latest;}catch(ServiceException e){throw e;}catch(Exception e){throw new ServiceException("上下文压缩失败："+safe(e));}
