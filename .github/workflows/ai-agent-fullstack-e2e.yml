@@ -159,6 +159,80 @@ jobs:
                       message = {'role': 'assistant', 'content': 'STEER_NEW_OK'}
                   elif 'STEER_CANCEL_WRITE' in latest_user:
                       message = {'role': 'assistant', 'content': 'WRITE_CANCELLED_BY_STEERING'}
+                  elif 'CROSS_PAGE_ROLE_ASSIGN' in latest_user:
+                      tool_results = [msg for msg in messages if msg.get('role') == 'tool']
+                      step = len(tool_results)
+
+                      def parsed_tool_payloads():
+                          values = []
+                          for item in tool_results:
+                              try:
+                                  values.append(json.loads(item.get('content') or '{}'))
+                              except Exception:
+                                  pass
+                          return values
+
+                      def find_cross_role_id():
+                          for payload in reversed(parsed_tool_payloads()):
+                              result = payload.get('result') or {}
+                              for row in result.get('rows') or []:
+                                  if row.get('roleKey') == 'e2e_cross_page':
+                                      return row.get('roleId')
+                          return None
+
+                      if step == 0:
+                          message = tool_call('page_system_user_search', {'userName': 'ry'})
+                          finish = 'tool_calls'
+                      elif step == 1:
+                          message = tool_call('app_navigate', {'path': '/system/role'})
+                          finish = 'tool_calls'
+                      elif step == 2:
+                          message = tool_call('page_system_role_search', {'roleName': 'E2E跨页角色'})
+                          finish = 'tool_calls'
+                      elif step == 3:
+                          message = tool_call('page_system_role_add_open', {})
+                          finish = 'tool_calls'
+                      elif step == 4:
+                          message = tool_call('page_system_role_add_set_fields', {
+                              'roleName': 'E2E跨页角色',
+                              'roleKey': 'e2e_cross_page',
+                              'roleSort': 99,
+                              'status': '0',
+                              'remark': 'AI cross-page E2E'
+                          })
+                          finish = 'tool_calls'
+                      elif step == 5:
+                          message = tool_call('page_system_role_add_submit', {})
+                          finish = 'tool_calls'
+                      elif step == 6:
+                          message = tool_call('page_system_role_search', {'roleName': 'E2E跨页角色'})
+                          finish = 'tool_calls'
+                      elif step == 7:
+                          message = tool_call('app_navigate', {'path': '/system/user-auth/role/2'})
+                          finish = 'tool_calls'
+                      elif step == 8:
+                          message = tool_call('page_system_user_auth_role_view', {})
+                          finish = 'tool_calls'
+                      elif step == 9:
+                          role_id = find_cross_role_id()
+                          if role_id is None:
+                              message = {'role': 'assistant', 'content': 'CROSS_PAGE_ROLE_ID_MISSING'}
+                          else:
+                              selected = []
+                              for payload in reversed(parsed_tool_payloads()):
+                                  result = payload.get('result') or {}
+                                  if result.get('selectedRoleIds') is not None:
+                                      selected = list(result.get('selectedRoleIds') or [])
+                                      break
+                              if role_id not in selected:
+                                  selected.append(role_id)
+                              message = tool_call('page_system_user_auth_role_select', {'roleIds': selected})
+                              finish = 'tool_calls'
+                      elif step == 10:
+                          message = tool_call('page_system_user_auth_role_submit', {})
+                          finish = 'tool_calls'
+                      else:
+                          message = {'role': 'assistant', 'content': 'CROSS_PAGE_ROLE_ASSIGN_DONE'}
                   elif any(name and name.startswith('page_system_user_') for name in names):
                       wants_login_name_change = (
                           any(word in latest_user for word in ['用户名称', '用户名', '登录账号', 'userName'])
