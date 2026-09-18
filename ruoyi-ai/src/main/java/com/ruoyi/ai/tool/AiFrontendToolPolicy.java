@@ -118,6 +118,13 @@ public class AiFrontendToolPolicy
                         "phonenumber", Map.of("type", "string"),
                         "pageNum", Map.of("type", "integer"),
                         "pageSize", Map.of("type", "integer")), List.of())));
+        allowlist.put("page_system_role_auth_user_candidates", new ToolPolicy(
+                "READ", "system:role:list", "查询当前角色尚未授权、可加入的候选用户",
+                objectSchema(Map.of(
+                        "userName", Map.of("type", "string"),
+                        "phonenumber", Map.of("type", "string"),
+                        "pageNum", Map.of("type", "integer"),
+                        "pageSize", Map.of("type", "integer")), List.of())));
         allowlist.put("page_system_role_auth_user_assign_users", new ToolPolicy(
                 "DANGEROUS_WRITE", "system:role:edit", "向当前角色批量授权用户",
                 objectSchema(Map.of("userIds", Map.of("type", "array", "items", Map.of("type", "integer"))), List.of("userIds"))));
