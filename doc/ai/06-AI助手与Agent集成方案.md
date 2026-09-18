@@ -58,12 +58,19 @@ OpenAI-compatible Provider
 
 ```text
 AgentRuntime
-├─ BuiltInSpringAiRuntime   ← 第一阶段实现
-├─ CodexHarnessAdapter      ← 预留
-└─ LocalHarnessAdapter      ← 预留
+├─ BuiltInSpringAiRuntime      ← 第一阶段实现
+├─ EmbeddedSdkHarnessAdapter   ← 后续首选
+└─ PiAgentAdapter              ← 需要独立 Harness 时的优先备选
 ```
 
-第一阶段不要求额外部署 Codex/Local Harness；管理员只配置 URL + Token 即可工作。
+第一阶段不要求额外部署 Harness；管理员只配置 URL + Token 即可工作。
+
+后续 Harness 方向遵循以下约束：
+
+1. **不接入 Codex Harness。** 它不再作为本项目的预留方向。
+2. 如果后续确实需要更完整的 Harness，**第一优先级是 SDK 内嵌式 Harness**：以依赖库/SDK 的方式集成进 `ruoyi-ai`，生命周期由 Spring Boot 管理，实现“后端启动即 Harness 可用”，避免再部署一个与后端平级的常驻 Harness 服务。
+3. 如果当时没有合适的 SDK 内嵌方案、又确实需要独立 Harness，**优先考虑 Pi Agent**，并尽量由后端统一托管其启动、停止、健康检查和配置，而不是让业务系统长期依赖一个人工维护的平级服务。
+4. `AgentRuntime` 抽象保持通用，业务层不写入 Pi 或其他具体 Harness 的专属假设，便于未来替换。
 
 ## 4. 技术选型
 
@@ -356,8 +363,9 @@ src/
 ## 16. 不在第一阶段做的事情
 
 - 本地文件/Office/桌面软件控制。
-- Local Harness 正式实现。
-- Codex Harness 正式实现。
+- SDK 内嵌式 Harness 正式实现。
+- Pi Agent Harness 正式实现。
+- Codex Harness 明确不纳入后续实现方向。
 - 页面任意 DOM/鼠标自动化。
 - 删除/重置密码等危险页面 Tool。
 - 多 Agent 编排。
