@@ -104,8 +104,11 @@ jobs:
           mysql -h127.0.0.1 -uroot -ppassword ry-vue <<SQL
           insert into ai_provider(name, provider_type, base_url, token_cipher, enabled, timeout_seconds, create_by, create_time, remark)
           values('AI 预览 Mock', 'OPENAI_COMPATIBLE', 'http://127.0.0.1:18080/v1', '$TOKEN_CIPHER', '0', 30, 'preview', sysdate(), '临时公网预览使用，Runner 销毁后自动消失');
-          insert into ai_model(provider_id, model_code, display_name, enabled, default_model, tool_capability, last_sync_time, create_by, create_time)
-          values(last_insert_id(), 'mock-agent-model', 'mock-agent-model', '0', '0', 'SUPPORTED', sysdate(), 'preview', sysdate());
+          set @provider_id = last_insert_id();
+          insert into ai_model(provider_id, model_code, display_name, enabled, default_model, tool_capability, reasoning_capability, reasoning_efforts, default_reasoning_effort, last_sync_time, create_by, create_time)
+          values(@provider_id, 'mock-agent-model', 'mock-agent-model', '0', '0', 'SUPPORTED', 'SUPPORTED', 'minimal,low,medium,high,xhigh', 'high', sysdate(), 'preview', sysdate());
+          insert into ai_model(provider_id, model_code, display_name, enabled, default_model, tool_capability, reasoning_capability, reasoning_efforts, default_reasoning_effort, last_sync_time, create_by, create_time)
+          values(@provider_id, 'mock-secondary-model', 'mock-secondary-model', '0', '1', 'SUPPORTED', 'SUPPORTED', 'minimal,low,medium,high,xhigh', 'low', sysdate(), 'preview', sysdate());
           SQL
 
       - name: Build backend
