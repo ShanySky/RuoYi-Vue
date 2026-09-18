@@ -65,6 +65,34 @@ public class AiAgentModelFactory
         return new ModelRuntime(chatModel, options, model);
     }
 
+    public boolean isPromptCacheUnsupported(Throwable error)
+    {
+        StringBuilder messages = new StringBuilder();
+        Throwable current = error;
+        int depth = 0;
+        while (current != null && depth++ < 8)
+        {
+            if (current.getMessage() != null)
+            {
+                messages.append(' ').append(current.getMessage().toLowerCase(java.util.Locale.ROOT));
+            }
+            current = current.getCause();
+        }
+        String text = messages.toString();
+        boolean namesCacheParameter = text.contains("prompt_cache_key")
+                || text.contains("prompt cache key")
+                || text.contains("prompt-cache-key");
+        boolean saysUnsupported = text.contains("unsupported")
+                || text.contains("unknown")
+                || text.contains("unrecognized")
+                || text.contains("not permitted")
+                || text.contains("not allowed")
+                || text.contains("extra_forbidden")
+                || text.contains("invalid parameter")
+                || text.contains("unexpected field");
+        return namesCacheParameter && saysUnsupported;
+    }
+
     public record ModelRuntime(OpenAiChatModel chatModel, OpenAiChatOptions options, AiModel model)
     {
     }
