@@ -23,6 +23,11 @@ public class AiAgentModelFactory
 
     public ModelRuntime create(Long modelId, List<ToolCallback> tools)
     {
+        return create(modelId, tools, null);
+    }
+
+    public ModelRuntime create(Long modelId, List<ToolCallback> tools, String reasoningEffort)
+    {
         AiModel model = configService.requireModel(modelId);
         if (!"0".equals(model.getEnabled()))
         {
@@ -34,15 +39,19 @@ public class AiAgentModelFactory
             throw new com.ruoyi.common.exception.ServiceException("模型与当前 Provider 不匹配");
         }
         int timeout = provider.getTimeoutSeconds() == null ? 30 : provider.getTimeoutSeconds();
-        OpenAiChatOptions options = OpenAiChatOptions.builder()
+        OpenAiChatOptions.Builder builder = OpenAiChatOptions.builder()
                 .baseUrl(provider.getBaseUrl())
                 .apiKey(cryptoService.decrypt(provider.getTokenCipher()))
                 .model(model.getModelCode())
                 .timeout(Duration.ofSeconds(timeout))
                 .maxRetries(0)
                 .parallelToolCalls(false)
-                .toolCallbacks(tools)
-                .build();
+                .toolCallbacks(tools);
+        if (reasoningEffort != null && !reasoningEffort.isBlank())
+        {
+            builder.reasoningEffort(reasoningEffort);
+        }
+        OpenAiChatOptions options = builder.build();
         OpenAiChatModel chatModel = OpenAiChatModel.builder().options(options).build();
         return new ModelRuntime(chatModel, options, model);
     }
