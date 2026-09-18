@@ -204,7 +204,10 @@ public class AiAgentLoopService
         }
         catch (InterruptedException e)
         {
-            Thread.currentThread().interrupt();
+            // Run cancellation is represented as InterruptedException by AiRunService.call().
+            // Do not leave the servlet thread interrupted before re-reading persisted Run state,
+            // otherwise JDBC pool acquisition can itself be interrupted.
+            Thread.interrupted();
             return runState(conversation, runService.get(run.getRunId()));
         }
         catch (Exception e)
