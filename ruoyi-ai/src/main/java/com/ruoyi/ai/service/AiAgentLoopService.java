@@ -41,7 +41,7 @@ import com.ruoyi.common.utils.StringUtils;
 @Service
 public class AiAgentLoopService
 {
-    private static final int MAX_TOOL_RESULTS_PER_TURN = 8;
+    private static final int MAX_TOOL_RESULTS_PER_TURN = 16;
     private static final int MAX_PAGE_CONTEXT_CHARS = 20000;
     private static final int MAX_TOOL_RESULT_CHARS = 20000;
 
