@@ -368,6 +368,15 @@ jobs:
           test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_message where role='ASSISTANT' and content='STEER_NEW_OK'" ry-vue)" -ge 1
           test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select chat_font_size from ai_user_preference where user_id=1" ry-vue)" = "standard"
 
+          # Phase-three Conversation recovery and account preferences must survive real reload/logout flows.
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_conversation where user_id=1 and title='G_HISTORY_RESTORE_TEST'" ry-vue)" -ge 1
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_conversation where user_id=1 and title='G_RENAMED_CONVERSATION'" ry-vue)" -ge 1
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_run where user_id=1 and status='CANCELLED' and cancel_reason='CLIENT_RELOAD'" ry-vue)" -ge 1
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_run where user_id=1 and status='CANCELLED' and cancel_reason='USER_LOGOUT'" ry-vue)" -ge 1
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select history_entry_visible from ai_user_preference where user_id=1" ry-vue)" = "0"
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select auto_restore_last_conversation from ai_user_preference where user_id=1" ry-vue)" = "1"
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select send_shortcut from ai_user_preference where user_id=1" ry-vue)" = "ctrl-enter"
+
           sleep 2
           test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from sys_oper_log where title='AI 服务配置' and oper_param like '%e2e-provider-placeholder%'" ry-vue)" = "0"
           test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_provider where token_cipher like 'v1:%' and token_cipher not like '%e2e-provider-placeholder%'" ry-vue)" = "1"
