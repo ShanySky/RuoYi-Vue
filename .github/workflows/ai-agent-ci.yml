@@ -93,7 +93,8 @@ jobs:
                       names = [((t.get('function') or {}).get('name')) for t in tools]
                       name = 'page_system_user_search' if 'page_system_user_search' in names else names[0]
                       args = {'userName':'ry'} if name == 'page_system_user_search' else {}
-                      message = {'role':'assistant','content':None,'tool_calls':[{'id':'call_ci_1','type':'function','function':{'name':name,'arguments':json.dumps(args)}}]}
+                      # Intentionally repeat the provider id across user turns. Runtime must normalize it.
+                      message = {'role':'assistant','content':None,'tool_calls':[{'id':'call_ci_repeated','type':'function','function':{'name':name,'arguments':json.dumps(args)}}]}
                       finish = 'tool_calls'
                   else:
                       message = {'role':'assistant','content':'AI_OK'}
@@ -168,6 +169,22 @@ jobs:
           JSON
           curl -fsS -H "$AUTH" -H 'Content-Type: application/json' --data-binary @/tmp/turn2.json http://127.0.0.1:8080/ai/chat/turn | tee /tmp/turn2-response.json | python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["type"]=="MESSAGE"; assert d["message"]=="TOOL_RESULT_ACCEPTED"'
 
+          # Same conversation, second user turn. Mock intentionally emits the same provider tool_call.id.
+          # The runtime must return a new internal callId and complete without a DB unique-key error.
+          cat > /tmp/turn3.json <<JSON
+          {"conversationId":$CONV_ID,"modelId":$MODEL_ID,"userMessage":"再查一次用户 ry","route":"/system/user","pageContext":{"pageName":"用户管理"},"frontendTools":[{"name":"page_system_user_search","description":"查询用户","inputSchema":{"type":"object","properties":{"userName":{"type":"string"}},"additionalProperties":false}}]}
+          JSON
+          TURN3=$(curl -fsS -H "$AUTH" -H 'Content-Type: application/json' --data-binary @/tmp/turn3.json http://127.0.0.1:8080/ai/chat/turn)
+          printf '%s' "$TURN3" | tee /tmp/turn3-response.json
+          CALL_ID_2=$(printf '%s' "$TURN3" | python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["type"]=="TOOL_CALL"; print(d["toolCall"]["callId"])')
+          test "$CALL_ID" != "$CALL_ID_2"
+
+          cat > /tmp/turn4.json <<JSON
+          {"conversationId":$CONV_ID,"toolResult":{"callId":"$CALL_ID_2","success":true,"result":{"total":1,"rows":[{"userId":2,"userName":"ry","nickName":"若依"}]}},"route":"/system/user","pageContext":{"pageName":"用户管理","total":1},"frontendTools":[{"name":"page_system_user_search","description":"查询用户","inputSchema":{"type":"object","properties":{"userName":{"type":"string"}},"additionalProperties":false}}]}
+          JSON
+          curl -fsS -H "$AUTH" -H 'Content-Type: application/json' --data-binary @/tmp/turn4.json http://127.0.0.1:8080/ai/chat/turn | tee /tmp/turn4-response.json | python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["type"]=="MESSAGE"; assert d["message"]=="TOOL_RESULT_ACCEPTED"'
+
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_pending_tool_call where conversation_id=$CONV_ID and status='RESOLVED'" ry-vue)" = "2"
           mysql -h127.0.0.1 -uroot -ppassword -Nse "select concat((select count(*) from ai_conversation),' ',(select count(*) from ai_message),' ',(select count(*) from ai_pending_tool_call where status='RESOLVED'))" ry-vue
 
       - name: Upload diagnostic logs
@@ -182,4 +199,6 @@ jobs:
             /tmp/test-tools.json
             /tmp/turn1-response.json
             /tmp/turn2-response.json
+            /tmp/turn3-response.json
+            /tmp/turn4-response.json
           if-no-files-found: warn
