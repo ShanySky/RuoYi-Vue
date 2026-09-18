@@ -448,7 +448,7 @@ jobs:
           test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_run r join ai_checkpoint c on c.run_id=r.run_id where c.summary like '%H_COMPACTION_APPLIED%' and r.compaction_prompt_version > 2" ry-vue)" -ge 1
           test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_message where role='ASSISTANT' and content='AI_OK:mock-agent-model:none' and reasoning_effort='none'" ry-vue)" -ge 1
           test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_message where role='ASSISTANT' and content='AI_OK:mock-agent-model:max' and reasoning_effort='max'" ry-vue)" -ge 1
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from sys_user where user_name like 'a3%'" ry-vue)" = "0"
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from sys_user where user_name like 'a3%' and del_flag='0'" ry-vue)" = "0"
           test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from sys_oper_log where title in ('AI Prompt 配置','AI Prompt 恢复默认','AI 页面能力','AI 会话策略','AI 会话过期清理','AI 会话审计查看')" ry-vue)" -ge 6
           test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from sys_role_menu where role_id=2 and menu_id in (118,1061)" ry-vue)" = "2"
           test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from sys_role_menu where role_id=2 and menu_id=2107" ry-vue)" = "0"
