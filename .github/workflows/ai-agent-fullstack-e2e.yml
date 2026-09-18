@@ -387,7 +387,7 @@ jobs:
           cat /tmp/ruoyi-frontend.log
           exit 1
 
-      # Phase-two browser acceptance always checks out the current frontend branch head.
+      # Phase-three browser acceptance always checks out the current frontend branch head.
       - name: Run browser closed-loop acceptance
         working-directory: frontend
         env:
@@ -400,6 +400,13 @@ jobs:
         run: |
           set -o pipefail
           node tests/ai-agent-e2e.mjs 2>&1 | tee /tmp/ai-agent-e2e.log
+
+      - name: Verify phase-three visual evidence files
+        working-directory: frontend
+        run: |
+          test -s test-results/phase3-ai-floating.png
+          test -s test-results/phase3-ai-dock.png
+          test -s test-results/phase3-ai-model-picker.png
 
       - name: Verify persistence, audit redaction and Agent state
         run: |
