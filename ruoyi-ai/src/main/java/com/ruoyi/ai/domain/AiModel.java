@@ -21,6 +21,9 @@ public class AiModel extends BaseEntity
     private String reasoningCapability;
     private String reasoningEfforts;
     private String defaultReasoningEffort;
+    private Integer contextWindowTokens;
+    private String autoCompaction;
+    private Integer compactionThresholdPercent;
     private Date lastSyncTime;
 
     public Long getModelId()
@@ -132,6 +135,13 @@ public class AiModel extends BaseEntity
     {
         this.defaultReasoningEffort = defaultReasoningEffort;
     }
+
+    public Integer getContextWindowTokens() { return contextWindowTokens; }
+    public void setContextWindowTokens(Integer value) { this.contextWindowTokens = value; }
+    public String getAutoCompaction() { return autoCompaction; }
+    public void setAutoCompaction(String value) { this.autoCompaction = value; }
+    public Integer getCompactionThresholdPercent() { return compactionThresholdPercent; }
+    public void setCompactionThresholdPercent(Integer value) { this.compactionThresholdPercent = value; }
 
     public Date getLastSyncTime()
     {

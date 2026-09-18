@@ -25,7 +25,7 @@ public class AiConfigService
     public static final String CAPABILITY_UNKNOWN = "UNKNOWN";
     public static final String CAPABILITY_SUPPORTED = "SUPPORTED";
     public static final String CAPABILITY_UNSUPPORTED = "UNSUPPORTED";
-    private static final Set<String> REASONING_EFFORTS = Set.of("minimal", "low", "medium", "high", "xhigh");
+    private static final Set<String> REASONING_EFFORTS = Set.of("none", "minimal", "low", "medium", "high", "xhigh", "max");
 
     private final AiProviderMapper providerMapper;
     private final AiModelMapper modelMapper;
@@ -182,6 +182,9 @@ public class AiConfigService
                 model.setReasoningCapability(CAPABILITY_UNKNOWN);
                 model.setReasoningEfforts(null);
                 model.setDefaultReasoningEffort(null);
+                model.setContextWindowTokens(65536);
+                model.setAutoCompaction("0");
+                model.setCompactionThresholdPercent(75);
                 model.setLastSyncTime(now);
                 model.setCreateBy(username);
                 modelMapper.insert(model);
@@ -351,6 +354,27 @@ public class AiConfigService
             throw new ServiceException("不支持的思考档位：" + value);
         }
         return value;
+    }
+
+    public void setModelRuntimeSettings(Long modelId, Integer contextWindowTokens, Boolean autoCompaction,
+            Integer compactionThresholdPercent)
+    {
+        AiModel model = requireSystemModel(modelId);
+        int window = contextWindowTokens == null ? 65536 : contextWindowTokens;
+        int threshold = compactionThresholdPercent == null ? 75 : compactionThresholdPercent;
+        if (window < 8192 || window > 2000000)
+        {
+            throw new ServiceException("上下文窗口必须在 8K 到 2000K 之间");
+        }
+        if (threshold < 50 || threshold > 95)
+        {
+            throw new ServiceException("压缩阈值必须在 50% 到 95% 之间");
+        }
+        model.setContextWindowTokens(window);
+        model.setAutoCompaction(Boolean.FALSE.equals(autoCompaction) ? "1" : "0");
+        model.setCompactionThresholdPercent(threshold);
+        model.setUpdateBy(SecurityUtils.getUsername());
+        modelMapper.updateRuntimeSettings(model);
     }
 
     public String testChat(Long modelId)

@@ -82,7 +82,7 @@ public class AiModelCapabilityService
         }
 
         List<String> supported = new ArrayList<>();
-        for (String effort : List.of("minimal", "low", "medium", "high", "xhigh"))
+        for (String effort : List.of("none", "minimal", "low", "medium", "high", "xhigh", "max"))
         {
             try
             {

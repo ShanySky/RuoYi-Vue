@@ -13,7 +13,8 @@ public interface AiModelMapper
     String SELECT_FIELDS = "select model_id as modelId, provider_id as providerId, model_code as modelCode, "
             + "display_name as displayName, selected, enabled, default_model as defaultModel, tool_capability as toolCapability, "
             + "reasoning_capability as reasoningCapability, reasoning_efforts as reasoningEfforts, "
-            + "default_reasoning_effort as defaultReasoningEffort, "
+            + "default_reasoning_effort as defaultReasoningEffort, context_window_tokens as contextWindowTokens, "
+            + "auto_compaction as autoCompaction, compaction_threshold_percent as compactionThresholdPercent, "
             + "last_sync_time as lastSyncTime, create_by as createBy, create_time as createTime, update_by as updateBy, "
             + "update_time as updateTime, remark ";
 
@@ -29,8 +30,8 @@ public interface AiModelMapper
     @Select(SELECT_FIELDS + "from ai_model where provider_id=#{providerId} and model_code=#{modelCode} limit 1")
     AiModel selectByProviderAndCode(@Param("providerId") Long providerId, @Param("modelCode") String modelCode);
 
-    @Insert("insert into ai_model(provider_id, model_code, display_name, selected, enabled, default_model, tool_capability, reasoning_capability, reasoning_efforts, default_reasoning_effort, last_sync_time, create_by, create_time, remark) "
-            + "values(#{providerId}, #{modelCode}, #{displayName}, #{selected}, #{enabled}, #{defaultModel}, #{toolCapability}, #{reasoningCapability}, #{reasoningEfforts}, #{defaultReasoningEffort}, #{lastSyncTime}, #{createBy}, sysdate(), #{remark})")
+    @Insert("insert into ai_model(provider_id, model_code, display_name, selected, enabled, default_model, tool_capability, reasoning_capability, reasoning_efforts, default_reasoning_effort, context_window_tokens, auto_compaction, compaction_threshold_percent, last_sync_time, create_by, create_time, remark) "
+            + "values(#{providerId}, #{modelCode}, #{displayName}, #{selected}, #{enabled}, #{defaultModel}, #{toolCapability}, #{reasoningCapability}, #{reasoningEfforts}, #{defaultReasoningEffort}, #{contextWindowTokens}, #{autoCompaction}, #{compactionThresholdPercent}, #{lastSyncTime}, #{createBy}, sysdate(), #{remark})")
     @Options(useGeneratedKeys = true, keyProperty = "modelId")
     int insert(AiModel model);
 
@@ -57,6 +58,9 @@ public interface AiModelMapper
 
     @Update("update ai_model set default_reasoning_effort=#{defaultReasoningEffort}, update_by=#{updateBy}, update_time=sysdate() where model_id=#{modelId}")
     int updateDefaultReasoningEffort(AiModel model);
+
+    @Update("update ai_model set context_window_tokens=#{contextWindowTokens}, auto_compaction=#{autoCompaction}, compaction_threshold_percent=#{compactionThresholdPercent}, update_by=#{updateBy}, update_time=sysdate() where model_id=#{modelId}")
+    int updateRuntimeSettings(AiModel model);
 
     @Select(SELECT_FIELDS + "from ai_model where selected='0' and enabled='0' and default_model='0' order by model_id limit 1")
     AiModel selectDefaultEnabled();
