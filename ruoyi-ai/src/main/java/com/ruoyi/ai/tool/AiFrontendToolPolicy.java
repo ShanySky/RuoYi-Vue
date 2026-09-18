@@ -99,6 +99,65 @@ public class AiFrontendToolPolicy
         allowlist.put("page_system_user_auth_role_submit", new ToolPolicy(
                 "DANGEROUS_WRITE", "system:user:edit", "提交用户角色授权；会改变该用户实际权限",
                 objectSchema(Map.of(), List.of())));
+        allowlist.put("page_system_role_data_scope_open", new ToolPolicy(
+                "UI", "system:role:edit", "打开指定角色的数据权限配置",
+                objectSchema(Map.of("roleId", Map.of("type", "integer", "description", "角色ID")), List.of("roleId"))));
+        allowlist.put("page_system_role_data_scope_set_fields", new ToolPolicy(
+                "UI", "system:role:edit", "修改当前角色的数据范围和自定义部门选择但不保存",
+                objectSchema(Map.of(
+                        "dataScope", Map.of("type", "string", "enum", List.of("1", "2", "3", "4", "5")),
+                        "deptIds", Map.of("type", "array", "items", Map.of("type", "integer")),
+                        "deptCheckStrictly", Map.of("type", "boolean")), List.of())));
+        allowlist.put("page_system_role_data_scope_submit", new ToolPolicy(
+                "DANGEROUS_WRITE", "system:role:edit", "提交角色数据权限；会改变该角色可访问的数据范围",
+                objectSchema(Map.of(), List.of())));
+        allowlist.put("page_system_role_auth_user_search", new ToolPolicy(
+                "READ", "system:role:list", "查询指定角色当前已授权用户",
+                objectSchema(Map.of(
+                        "userName", Map.of("type", "string"),
+                        "phonenumber", Map.of("type", "string"),
+                        "pageNum", Map.of("type", "integer"),
+                        "pageSize", Map.of("type", "integer")), List.of())));
+        allowlist.put("page_system_role_auth_user_assign_users", new ToolPolicy(
+                "DANGEROUS_WRITE", "system:role:edit", "向当前角色批量授权用户",
+                objectSchema(Map.of("userIds", Map.of("type", "array", "items", Map.of("type", "integer"))), List.of("userIds"))));
+        allowlist.put("page_system_role_auth_user_cancel_user", new ToolPolicy(
+                "DANGEROUS_WRITE", "system:role:edit", "取消单个用户的当前角色授权",
+                objectSchema(Map.of("userId", Map.of("type", "integer")), List.of("userId"))));
+        allowlist.put("page_system_role_auth_user_cancel_users", new ToolPolicy(
+                "DANGEROUS_WRITE", "system:role:edit", "批量取消用户的当前角色授权",
+                objectSchema(Map.of("userIds", Map.of("type", "array", "items", Map.of("type", "integer"))), List.of("userIds"))));
+        allowlist.put("page_system_dept_sort_submit", new ToolPolicy(
+                "WRITE", "system:dept:edit", "保存部门显示排序",
+                objectSchema(Map.of("items", Map.of("type", "array", "items", Map.of("type", "object"))), List.of("items"))));
+        allowlist.put("page_system_notice_read_users", new ToolPolicy(
+                "READ", "system:notice:list", "打开公告已读用户并返回当前已读用户列表",
+                objectSchema(Map.of("noticeId", Map.of("type", "integer")), List.of("noticeId"))));
+        allowlist.put("page_tool_gen_preview", new ToolPolicy(
+                "READ", "tool:gen:preview", "预览指定生成表的代码",
+                objectSchema(Map.of("tableId", Map.of("type", "integer")), List.of("tableId"))));
+        allowlist.put("page_tool_gen_sync_db", new ToolPolicy(
+                "DANGEROUS_WRITE", "tool:gen:edit", "将生成配置与数据库表结构强制同步",
+                objectSchema(Map.of("tableId", Map.of("type", "integer")), List.of("tableId"))));
+        allowlist.put("page_tool_gen_generate", new ToolPolicy(
+                "DANGEROUS_WRITE", "tool:gen:code", "按当前生成配置生成代码；自定义路径模式可能写入服务器文件",
+                objectSchema(Map.of("tableId", Map.of("type", "integer")), List.of("tableId"))));
+        allowlist.put("page_system_profile_view", new ToolPolicy(
+                "READ", null, "查看当前登录用户自己的个人资料",
+                objectSchema(Map.of(), List.of())));
+        allowlist.put("page_system_profile_set_fields", new ToolPolicy(
+                "UI", null, "修改当前登录用户自己的基本资料表单但不保存",
+                objectSchema(Map.of(
+                        "nickName", Map.of("type", "string"),
+                        "phonenumber", Map.of("type", "string"),
+                        "email", Map.of("type", "string"),
+                        "sex", Map.of("type", "string", "enum", List.of("0", "1", "2"))), List.of())));
+        allowlist.put("page_system_profile_submit", new ToolPolicy(
+                "WRITE", null, "保存当前登录用户自己的基本资料",
+                objectSchema(Map.of(), List.of())));
+        allowlist.put("page_system_profile_select_tab", new ToolPolicy(
+                "UI", null, "切换个人中心的基本资料或修改密码页签；密码字段不向 AI 暴露",
+                objectSchema(Map.of("tab", Map.of("type", "string", "enum", List.of("userinfo", "resetPwd"))), List.of("tab"))));
     }
 
     public List<ApprovedTool> approve(List<AiFrontendToolDefinition> requested)
