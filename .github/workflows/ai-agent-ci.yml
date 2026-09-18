@@ -215,6 +215,21 @@ jobs:
           LONG1=$(curl -fsS -H "$AUTH" -H 'Content-Type: application/json' --data-binary @/tmp/long-turn1.json http://127.0.0.1:8080/ai/chat/turn)
           printf '%s' "$LONG1" | python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["type"]=="MESSAGE"; assert d["message"]=="AI_OK"'
 
+          python3 - "$LONG_CONV_ID" "$MODEL_ID" <<'PY' >/tmp/long-turn2.json
+          import json,sys
+          cid=int(sys.argv[1]); mid=int(sys.argv[2])
+          print(json.dumps({"conversationId":cid,"modelId":mid,"userMessage":"LONG_CONTEXT_B:"+("B"*11800),"route":"/system/user","pageContext":{"pageName":"用户管理"}}, ensure_ascii=False))
+          PY
+          LONG2=$(curl -fsS -H "$AUTH" -H 'Content-Type: application/json' --data-binary @/tmp/long-turn2.json http://127.0.0.1:8080/ai/chat/turn)
+          printf '%s' "$LONG2" | tee /tmp/long-turn2-response.json | python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["type"]=="MESSAGE"; assert d["message"]=="AI_OK"'
+
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_checkpoint where conversation_id=$LONG_CONV_ID and status='ACTIVE' and summary='CHECKPOINT_OK'" ry-vue)" -ge 1
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_run where conversation_id=$LONG_CONV_ID and status='COMPLETED' and input_tokens>0 and cache_read_tokens>0 and total_tokens>0" ry-vue)" -ge 1
+          grep -q "CACHE_KEY=ruoyi:conv:$LONG_CONV_ID:system:" /tmp/mock-openai.log
+          grep -q "CACHE_KEY=ruoyi:compaction:$LONG_CONV_ID" /tmp/mock-openai.log
+
+          curl -fsS -H "$AUTH" -H 'Content-Type: application/json' -X PUT             -d '{"contextWindowTokens":65536,"autoCompaction":true,"compactionThresholdPercent":75}'             "http://127.0.0.1:8080/ai/config/models/$MODEL_ID/runtime-settings" >/tmp/runtime-reset.json
+
       - name: Upload diagnostic logs
         if: always()
         uses: actions/upload-artifact@v4
