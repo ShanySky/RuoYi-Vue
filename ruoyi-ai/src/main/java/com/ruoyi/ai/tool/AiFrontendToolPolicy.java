@@ -48,6 +48,20 @@ public class AiFrontendToolPolicy
         allowlist.put("page_monitor_operlog_view", new ToolPolicy(
                 "READ", "monitor:operlog:query", "查看指定操作日志详情",
                 objectSchema(Map.of("operId", Map.of("type", "integer", "description", "操作日志ID")), List.of("operId"))));
+        allowlist.put("page_monitor_cache_list_view_value", new ToolPolicy(
+                "READ", "monitor:cache:list", "查看指定缓存键当前值",
+                objectSchema(Map.of(
+                        "cacheName", Map.of("type", "string"),
+                        "cacheKey", Map.of("type", "string")), List.of("cacheName", "cacheKey"))));
+        allowlist.put("page_monitor_cache_list_clear_name", new ToolPolicy(
+                "DANGEROUS_WRITE", "monitor:cache:list", "清理指定缓存名称下全部键；可能影响登录、配置或业务运行状态",
+                objectSchema(Map.of("cacheName", Map.of("type", "string")), List.of("cacheName"))));
+        allowlist.put("page_monitor_cache_list_clear_key", new ToolPolicy(
+                "DANGEROUS_WRITE", "monitor:cache:list", "删除指定 Redis 缓存键；可能影响业务运行状态",
+                objectSchema(Map.of("cacheKey", Map.of("type", "string")), List.of("cacheKey"))));
+        allowlist.put("page_monitor_cache_list_clear_all", new ToolPolicy(
+                "DANGEROUS_WRITE", "monitor:cache:list", "清理当前 Redis 数据库全部缓存键；高风险且可能使登录会话失效",
+                objectSchema(Map.of(), List.of())));
         allowlist.put("page_monitor_operlog_clean", new ToolPolicy(
                 "DANGEROUS_WRITE", "monitor:operlog:remove", "清空全部操作日志；该动作不可逆",
                 objectSchema(Map.of(), List.of())));
