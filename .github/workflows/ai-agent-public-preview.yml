@@ -162,7 +162,10 @@ jobs:
                   if self.path == '/v1/models':
                       self.send_json(200, {
                           'object': 'list',
-                          'data': [{'id':'mock-agent-model','object':'model','created':int(time.time()),'owned_by':'preview'}]
+                          'data': [
+                              {'id':'mock-agent-model','object':'model','created':int(time.time()),'owned_by':'preview'},
+                              {'id':'mock-secondary-model','object':'model','created':int(time.time()),'owned_by':'preview'}
+                          ]
                       })
                   else:
                       self.send_json(404, {'error':'not found'})
