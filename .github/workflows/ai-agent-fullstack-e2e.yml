@@ -151,9 +151,18 @@ jobs:
                           any(word in latest_user for word in ['用户名称', '用户名', '登录账号', 'userName'])
                           and any(word in latest_user for word in ['修改', '改成', '改为', '换成'])
                       )
+                      runtime_isolation = 'RUNTIME_ISOLATION' in latest_user
                       tool_results = [msg for msg in messages if msg.get('role') == 'tool']
                       step = len(tool_results)
-                      if wants_login_name_change and step == 0:
+                      if runtime_isolation and step > 0:
+                          message = {
+                              'role': 'assistant',
+                              'content': 'ISOLATION:%s:%s' % (
+                                  body.get('model'),
+                                  body.get('reasoning_effort') or 'default'
+                              )
+                          }
+                      elif wants_login_name_change and step == 0:
                           message = {'role': 'assistant', 'content': '当前 RuoYi 不支持修改已有用户的登录账号 userName；可以修改的是用户昵称 nickName。'}
                       elif step == 0:
                           message = tool_call('page_system_user_search', {'userName': 'ry'})
