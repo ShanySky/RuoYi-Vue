@@ -106,6 +106,15 @@ public class AiAgentLoopService
                     selection.reasoningEffort());
             conversation.setModelId(selection.modelId());
             conversation.setReasoningEffort(selection.reasoningEffort());
+            if ("新会话".equals(conversation.getTitle()) && StringUtils.isNotBlank(request.getUserMessage()))
+            {
+                String initialTitle = trimTo(request.getUserMessage().trim().replaceAll("\\s+", " "), 80);
+                if (StringUtils.isNotBlank(initialTitle)
+                        && conversationMapper.updateInitialTitle(conversation.getConversationId(), userId, initialTitle) == 1)
+                {
+                    conversation.setTitle(initialTitle);
+                }
+            }
             insertMessage(conversation.getConversationId(), run.getRunId(), "USER",
                     trimTo(request.getUserMessage(), 12000), null, null, null, selection);
         }
