@@ -149,6 +149,24 @@ public class AiFrontendToolPolicy
         allowlist.put("page_tool_gen_generate", new ToolPolicy(
                 "DANGEROUS_WRITE", "tool:gen:code", "按当前生成配置生成代码；自定义路径模式可能写入服务器文件",
                 objectSchema(Map.of("tableId", Map.of("type", "integer")), List.of("tableId"))));
+        allowlist.put("page_tool_gen_edit_view", new ToolPolicy(
+                "READ", "tool:gen:query", "查看当前代码生成配置与字段配置",
+                objectSchema(Map.of(), List.of())));
+        allowlist.put("page_tool_gen_edit_set_info", new ToolPolicy(
+                "UI", "tool:gen:edit", "修改当前代码生成基础/生成信息但不保存",
+                flexibleObjectSchema()));
+        allowlist.put("page_tool_gen_edit_set_column", new ToolPolicy(
+                "UI", "tool:gen:edit", "修改指定生成字段配置但不保存",
+                flexibleObjectSchema()));
+        allowlist.put("page_tool_gen_edit_reorder_columns", new ToolPolicy(
+                "UI", "tool:gen:edit", "调整当前生成字段顺序但不保存",
+                objectSchema(Map.of("columnIds", Map.of("type", "array", "items", Map.of("type", "integer"))), List.of("columnIds"))));
+        allowlist.put("page_tool_gen_edit_select_tab", new ToolPolicy(
+                "UI", "tool:gen:query", "切换代码生成配置页签",
+                objectSchema(Map.of("tab", Map.of("type", "string", "enum", List.of("basic", "columnInfo", "genInfo"))), List.of("tab"))));
+        allowlist.put("page_tool_gen_edit_submit", new ToolPolicy(
+                "DANGEROUS_WRITE", "tool:gen:edit", "提交代码生成配置；会改变后续生成代码内容和路径",
+                objectSchema(Map.of(), List.of())));
         allowlist.put("page_system_profile_view", new ToolPolicy(
                 "READ", null, "查看当前登录用户自己的个人资料",
                 objectSchema(Map.of(), List.of())));
