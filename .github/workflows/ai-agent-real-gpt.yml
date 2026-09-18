@@ -67,11 +67,6 @@ jobs:
           echo "configured=true" >> "$GITHUB_OUTPUT"
           {
             echo "REAL_GPT_CONFIGURED=true"
-            echo "BASE_URL_HOST=$(python3 - <<'PY'"
-            echo "import os, urllib.parse"
-            echo "print(urllib.parse.urlparse(os.environ['R3_REAL_GPT_BASE_URL']).hostname or '')"
-            echo "PY"
-            echo ")"
             echo "MODEL=$R3_REAL_GPT_MODEL"
             echo "REASONING=${R3_REAL_GPT_REASONING:-high}"
           } | tee /tmp/real-gpt-status.txt
@@ -151,7 +146,7 @@ jobs:
                   raise RuntimeError(f'{method} {path} HTTP {exc.code}: {raw[:1000]}') from exc
               if payload.get('code') != 200:
                   raise RuntimeError(f'{method} {path} failed: {payload}')
-              return payload.get('data')
+              return payload if path == '/login' else payload.get('data')
 
           login = request('/login', 'POST', {'username':'admin','password':'admin123'})
           token = login['token']
@@ -238,7 +233,7 @@ jobs:
           }, token)
 
           evidence = {
-              'providerHost': urllib.parse.urlparse(PROVIDER_BASE).hostname if False else None,
+              'providerBaseConfigured': True,
               'model': MODEL,
               'reasoning': REASONING,
               'cacheConversationId': cache_conversation,
