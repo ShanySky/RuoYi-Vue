@@ -17,6 +17,8 @@ public class AiModel extends BaseEntity
     private String enabled;
     private String defaultModel;
     private String toolCapability;
+    private String reasoningCapability;
+    private String defaultReasoningEffort;
     private Date lastSyncTime;
 
     public Long getModelId()
@@ -87,6 +89,26 @@ public class AiModel extends BaseEntity
     public void setToolCapability(String toolCapability)
     {
         this.toolCapability = toolCapability;
+    }
+
+    public String getReasoningCapability()
+    {
+        return reasoningCapability;
+    }
+
+    public void setReasoningCapability(String reasoningCapability)
+    {
+        this.reasoningCapability = reasoningCapability;
+    }
+
+    public String getDefaultReasoningEffort()
+    {
+        return defaultReasoningEffort;
+    }
+
+    public void setDefaultReasoningEffort(String defaultReasoningEffort)
+    {
+        this.defaultReasoningEffort = defaultReasoningEffort;
     }
 
     public Date getLastSyncTime()
