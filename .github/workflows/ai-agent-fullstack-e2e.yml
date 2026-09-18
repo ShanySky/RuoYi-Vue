@@ -157,12 +157,15 @@ jobs:
                       message = {'role': 'assistant', 'content': 'STEER_OLD_DONE'}
                   elif 'STEER_NEW' in latest_user:
                       message = {'role': 'assistant', 'content': 'STEER_NEW_OK'}
+                  elif 'STEER_CANCEL_WRITE' in latest_user:
+                      message = {'role': 'assistant', 'content': 'WRITE_CANCELLED_BY_STEERING'}
                   elif any(name and name.startswith('page_system_user_') for name in names):
                       wants_login_name_change = (
                           any(word in latest_user for word in ['用户名称', '用户名', '登录账号', 'userName'])
                           and any(word in latest_user for word in ['修改', '改成', '改为', '换成'])
                       )
                       runtime_isolation = 'RUNTIME_ISOLATION' in latest_user
+                      steer_write_old = 'STEER_WRITE_OLD' in latest_user
                       tool_results = [msg for msg in messages if msg.get('role') == 'tool']
                       step = len(tool_results)
                       if runtime_isolation and step > 0:
@@ -182,7 +185,8 @@ jobs:
                           message = tool_call('page_system_user_edit_open', {'userId': 2})
                           finish = 'tool_calls'
                       elif step == 2:
-                          message = tool_call('page_system_user_edit_set_fields', {'nickName': 'AI闭环测试'})
+                          nickname = 'SHOULD_NOT_SAVE' if steer_write_old else 'AI闭环测试'
+                          message = tool_call('page_system_user_edit_set_fields', {'nickName': nickname})
                           finish = 'tool_calls'
                       elif step == 3:
                           message = tool_call('page_system_user_edit_submit', {})
