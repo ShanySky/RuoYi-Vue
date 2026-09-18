@@ -234,7 +234,26 @@ public class AiAgentLoopService
         }
         catch (Exception e)
         {
-            throw new ServiceException("AI 模型调用失败：" + safeMessage(e));
+            if (!modelFactory.isPromptCacheUnsupported(e))
+            {
+                throw new ServiceException("AI 模型调用失败：" + safeMessage(e));
+            }
+            AiAgentModelFactory.ModelRuntime fallbackRuntime = modelFactory.create(selection.modelId(), callbacks,
+                    selection.reasoningEffort(), null);
+            try
+            {
+                response = runService.call(run.getRunId(),
+                        () -> fallbackRuntime.chatModel().call(new Prompt(messages, fallbackRuntime.options())));
+            }
+            catch (InterruptedException interrupted)
+            {
+                Thread.interrupted();
+                return runState(conversation, runService.get(run.getRunId()));
+            }
+            catch (Exception fallbackError)
+            {
+                throw new ServiceException("AI 模型调用失败：" + safeMessage(fallbackError));
+            }
         }
 
         runService.recordUsage(run.getRunId(), response);
