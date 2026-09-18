@@ -2,11 +2,14 @@ package com.ruoyi.ai.service;
 import java.util.concurrent.*; import org.springframework.ai.chat.metadata.Usage; import org.springframework.ai.chat.model.ChatResponse; import org.springframework.stereotype.Service; import org.springframework.transaction.annotation.Transactional; import jakarta.annotation.PreDestroy; import com.ruoyi.ai.domain.*; import com.ruoyi.ai.mapper.*; import com.ruoyi.common.exception.ServiceException;
 @Service
 public class AiRunService {
- private final AiRunMapper runs; private final AiConversationMapper conversations; private final AiPendingToolCallMapper pending; private final ConcurrentHashMap<Long,Future<?>> inFlight=new ConcurrentHashMap<>(); private final ExecutorService executor=Executors.newCachedThreadPool();
- public AiRunService(AiRunMapper runs,AiConversationMapper conversations,AiPendingToolCallMapper pending){this.runs=runs;this.conversations=conversations;this.pending=pending;}
- @Transactional public AiRun start(AiConversation c,String clientRunKey,Long modelId,String modelCode,String effort,Integer systemVersion,Integer compactionVersion){
+ private final AiRunMapper runs; private final AiConversationMapper conversations; private final AiPendingToolCallMapper pending; private final AiMessageService messages; private final ConcurrentHashMap<Long,Future<?>> inFlight=new ConcurrentHashMap<>(); private final ExecutorService executor=Executors.newCachedThreadPool();
+ public AiRunService(AiRunMapper runs,AiConversationMapper conversations,AiPendingToolCallMapper pending,AiMessageService messages){this.runs=runs;this.conversations=conversations;this.pending=pending;this.messages=messages;}
+ @Transactional public AiRun start(AiConversation c,String clientRunKey,Long modelId,String modelCode,String effort,Integer systemVersion,Integer compactionVersion){return startLocked(c,clientRunKey,modelId,modelCode,effort,systemVersion,compactionVersion,null);}
+ @Transactional public AiRun start(AiConversation c,String clientRunKey,Long modelId,String modelCode,String effort,Integer systemVersion,Integer compactionVersion,String userMessage){return startLocked(c,clientRunKey,modelId,modelCode,effort,systemVersion,compactionVersion,userMessage);}
+ private AiRun startLocked(AiConversation c,String clientRunKey,Long modelId,String modelCode,String effort,Integer systemVersion,Integer compactionVersion,String userMessage){
    conversations.lockById(c.getConversationId());AiRun old=runs.selectActiveByConversation(c.getConversationId());
    AiRun n=new AiRun();n.setClientRunKey(normalizeClientRunKey(clientRunKey));n.setConversationId(c.getConversationId());n.setUserId(c.getUserId());n.setModelId(modelId);n.setModelCode(modelCode);n.setReasoningEffort(effort);n.setStatus("RUNNING");n.setSystemPromptVersion(systemVersion);n.setCompactionPromptVersion(compactionVersion);runs.insert(n);
+   if(userMessage!=null){AiMessage m=new AiMessage();m.setConversationId(c.getConversationId());m.setRunId(n.getRunId());m.setRole("USER");m.setContent(userMessage);m.setModelId(modelId);m.setModelCode(modelCode);m.setReasoningEffort(effort);messages.append(m);}
    if(old!=null){runs.supersede(old.getRunId(),n.getRunId());pending.cancelByRun(old.getRunId(),"SUPERSEDED");Future<?> f=inFlight.remove(old.getRunId());if(f!=null)f.cancel(true);}
    return n;
  }
