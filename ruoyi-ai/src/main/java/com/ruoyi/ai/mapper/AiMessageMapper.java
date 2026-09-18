@@ -8,13 +8,14 @@ import com.ruoyi.ai.domain.AiMessage;
 
 public interface AiMessageMapper
 {
-    @Insert("insert into ai_message(conversation_id, sequence_no, role, content, tool_call_id, tool_name, tool_arguments, create_time) "
-            + "values(#{conversationId}, #{sequenceNo}, #{role}, #{content}, #{toolCallId}, #{toolName}, #{toolArguments}, sysdate())")
+    @Insert("insert into ai_message(conversation_id, sequence_no, role, content, tool_call_id, tool_name, tool_arguments, model_id, model_code, reasoning_effort, create_time) "
+            + "values(#{conversationId}, #{sequenceNo}, #{role}, #{content}, #{toolCallId}, #{toolName}, #{toolArguments}, #{modelId}, #{modelCode}, #{reasoningEffort}, sysdate())")
     @Options(useGeneratedKeys = true, keyProperty = "messageId")
     int insert(AiMessage message);
 
     @Select("select message_id as messageId, conversation_id as conversationId, sequence_no as sequenceNo, role, content, "
-            + "tool_call_id as toolCallId, tool_name as toolName, tool_arguments as toolArguments, create_time as createTime "
+            + "tool_call_id as toolCallId, tool_name as toolName, tool_arguments as toolArguments, model_id as modelId, "
+            + "model_code as modelCode, reasoning_effort as reasoningEffort, create_time as createTime "
             + "from ai_message where conversation_id=#{conversationId} order by sequence_no")
     List<AiMessage> selectByConversationId(Long conversationId);
 
