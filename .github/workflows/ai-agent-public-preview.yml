@@ -227,7 +227,10 @@ jobs:
                   else:
                       message = {
                           'role':'assistant',
-                          'content':'这是临时预览环境的模拟模型。普通聊天链路已连通。进入“系统管理 → 用户管理”后，可以让我“查找用户 ry”，或让我查询、打开、修改并保存该用户。'
+                          'content':'这是临时预览环境的模拟模型。当前模型：%s；思考档位：%s。正式产品会直接调用你在设置中配置的真实 Provider。进入“系统管理 → 用户管理”后，也可以让我查询、打开、修改昵称并保存。' % (
+                              body.get('model','mock-agent-model'),
+                              body.get('reasoning_effort') or 'Provider 默认'
+                          )
                       }
                       finish = 'stop'
 
