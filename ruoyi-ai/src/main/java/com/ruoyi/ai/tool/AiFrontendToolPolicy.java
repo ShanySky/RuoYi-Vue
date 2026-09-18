@@ -222,7 +222,7 @@ public class AiFrontendToolPolicy
         String[] actionSuffixes = {
                 "reset_password", "change_status", "add_set_fields", "edit_set_fields",
                 "add_submit", "edit_submit", "import_open", "refresh_cache", "auth_role", "auth_user",
-                "add_open", "edit_open", "search", "reset", "delete", "export", "view"
+                "add_open", "edit_open", "search", "reset", "delete", "export", "view", "clean"
         };
 
         String action = null;
@@ -282,7 +282,7 @@ public class AiFrontendToolPolicy
                 permissionAction = "remove";
                 risk = "WRITE";
             }
-            case "delete" -> {
+            case "delete", "clean" -> {
                 permissionAction = "remove";
                 risk = "DANGEROUS_WRITE";
             }
@@ -303,7 +303,15 @@ public class AiFrontendToolPolicy
             }
         }
 
-        String permission = module + ":" + resource.replace('_', ':') + ":" + permissionAction;
+        String permissionResource = switch (resource)
+        {
+            case "role_auth_user" -> "role";
+            case "dict_data" -> "dict";
+            case "job_log" -> "job";
+            case "gen_edit" -> "gen";
+            default -> resource.replace('_', ':');
+        };
+        String permission = module + ":" + permissionResource + ":" + permissionAction;
         String description = "执行当前页面已注册的语义化业务动作 " + action
                 + "；字段、记录和动作范围以当前 Page Context 为准，不能越过 RuoYi 后端权限与数据范围";
         return new ToolPolicy(risk, permission, description, flexibleObjectSchema());
