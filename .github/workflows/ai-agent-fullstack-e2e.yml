@@ -434,6 +434,9 @@ jobs:
           test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_prompt where content=default_content and enabled='0'" ry-vue)" = "2"
           test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_checkpoint where summary like '%H_COMPACTION_APPLIED%'" ry-vue)" -ge 1
           test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_checkpoint where summary like '%DEFAULT_COMPACTION_APPLIED%'" ry-vue)" -ge 1
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_run r join ai_conversation c on c.conversation_id=r.conversation_id where c.title like 'UI_COMPACT_STOP_ONE%' and r.status='CANCELLED' and r.cancel_reason='USER_STOP'" ry-vue)" -ge 1
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_run r join ai_conversation c on c.conversation_id=r.conversation_id where c.title like 'UI_COMPACT_RELOAD_ONE%' and r.status='CANCELLED' and r.cancel_reason='CLIENT_RELOAD'" ry-vue)" -ge 1
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_checkpoint c join ai_conversation v on v.conversation_id=c.conversation_id where v.title like 'UI_COMPACT_STOP_ONE%' or v.title like 'UI_COMPACT_RELOAD_ONE%'" ry-vue)" = "0"
           test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_run r join ai_checkpoint c on c.run_id=r.run_id where c.summary like '%H_COMPACTION_APPLIED%' and r.compaction_prompt_version > 2" ry-vue)" -ge 1
           test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_message where role='ASSISTANT' and content='AI_OK:mock-agent-model:none' and reasoning_effort='none'" ry-vue)" -ge 1
           test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_message where role='ASSISTANT' and content='AI_OK:mock-agent-model:max' and reasoning_effort='max'" ry-vue)" -ge 1
