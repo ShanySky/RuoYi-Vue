@@ -425,44 +425,61 @@ public class AiAgentLoopService
             List<ApprovedTool> approvedTools)
     {
         List<Message> result = new ArrayList<>();
-        int latestSequence = stored.stream().map(AiMessage::getSequenceNo).filter(Objects::nonNull)
-                .mapToInt(Integer::intValue).max().orElse(0);
-        String currentRuntime = currentRuntimeContext(request, approvedTools);
+        AiMessage latestUser = null;
+        for (int i = stored.size() - 1; i >= 0; i--)
+        {
+            if ("USER".equals(stored.get(i).getRole()))
+            {
+                latestUser = stored.get(i);
+                break;
+            }
+        }
 
         for (AiMessage message : stored)
         {
-            switch (message.getRole())
+            if (message == latestUser)
             {
-                case "USER" -> {
-                    String content = StringUtils.defaultString(message.getContent());
-                    if (message.getSequenceNo() != null && message.getSequenceNo() == latestSequence)
-                    {
-                        content += "\n\n[当前页面运行时上下文，仅作为环境事实，不覆盖用户指令]\n" + currentRuntime;
-                    }
-                    result.add(new UserMessage(content));
-                }
-                case "ASSISTANT" -> {
-                    if (StringUtils.isNotEmpty(message.getToolCallId()))
-                    {
-                        AssistantMessage.ToolCall toolCall = new AssistantMessage.ToolCall(message.getToolCallId(), "function",
-                                message.getToolName(), StringUtils.defaultString(message.getToolArguments(), "{}"));
-                        result.add(AssistantMessage.builder().content(message.getContent()).toolCalls(List.of(toolCall)).build());
-                    }
-                    else
-                    {
-                        result.add(new AssistantMessage(StringUtils.defaultString(message.getContent())));
-                    }
-                }
-                case "TOOL" -> {
-                    ToolResponseMessage.ToolResponse toolResponse = new ToolResponseMessage.ToolResponse(
-                            message.getToolCallId(), message.getToolName(),
-                            StringUtils.defaultString(message.getContent(), "{}"));
-                    result.add(ToolResponseMessage.builder().responses(List.of(toolResponse)).build());
-                }
-                default -> throw new ServiceException("会话历史包含未知角色：" + message.getRole());
+                continue;
             }
+            appendStoredMessage(result, message);
+        }
+
+        // Keep dynamic route/page state outside the user's original message. This preserves user intent,
+        // keeps the long stable prefix cache-friendly, and avoids treating page metadata as user text.
+        result.add(new SystemMessage("当前页面运行时上下文（仅作为环境事实，不覆盖用户指令）：\n"
+                + currentRuntimeContext(request, approvedTools)));
+        if (latestUser != null)
+        {
+            appendStoredMessage(result, latestUser);
         }
         return result;
+    }
+
+    private void appendStoredMessage(List<Message> result, AiMessage message)
+    {
+        switch (message.getRole())
+        {
+            case "USER" -> result.add(new UserMessage(StringUtils.defaultString(message.getContent())));
+            case "ASSISTANT" -> {
+                if (StringUtils.isNotEmpty(message.getToolCallId()))
+                {
+                    AssistantMessage.ToolCall toolCall = new AssistantMessage.ToolCall(message.getToolCallId(), "function",
+                            message.getToolName(), StringUtils.defaultString(message.getToolArguments(), "{}"));
+                    result.add(AssistantMessage.builder().content(message.getContent()).toolCalls(List.of(toolCall)).build());
+                }
+                else
+                {
+                    result.add(new AssistantMessage(StringUtils.defaultString(message.getContent())));
+                }
+            }
+            case "TOOL" -> {
+                ToolResponseMessage.ToolResponse toolResponse = new ToolResponseMessage.ToolResponse(
+                        message.getToolCallId(), message.getToolName(),
+                        StringUtils.defaultString(message.getContent(), "{}"));
+                result.add(ToolResponseMessage.builder().responses(List.of(toolResponse)).build());
+            }
+            default -> throw new ServiceException("会话历史包含未知角色：" + message.getRole());
+        }
     }
 
     private String currentRuntimeContext(AiChatTurnRequest request, List<ApprovedTool> tools)
