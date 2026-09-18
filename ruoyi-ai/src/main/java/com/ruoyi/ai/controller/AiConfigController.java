@@ -3,6 +3,7 @@ package com.ruoyi.ai.controller;
 import java.util.List;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -11,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import com.ruoyi.ai.domain.AiModel;
+import com.ruoyi.ai.dto.AiModelSelectionRequest;
 import com.ruoyi.ai.dto.AiModelStatusRequest;
 import com.ruoyi.ai.dto.AiProviderSaveRequest;
 import com.ruoyi.ai.dto.AiReasoningEffortRequest;
@@ -56,11 +58,27 @@ public class AiConfigController
     }
 
     @PreAuthorize("@ss.hasPermi('ai:config:edit')")
-    @Log(title = "AI 模型同步", businessType = BusinessType.UPDATE)
-    @PostMapping("/models/sync")
-    public AjaxResult syncModels()
+    @PostMapping("/models/discover")
+    public AjaxResult discoverModels()
     {
-        return AjaxResult.success(configService.syncModels());
+        return AjaxResult.success(configService.discoverModels());
+    }
+
+    @PreAuthorize("@ss.hasPermi('ai:config:edit')")
+    @Log(title = "AI 模型添加", businessType = BusinessType.INSERT)
+    @PostMapping("/models")
+    public AjaxResult addModels(@Validated @RequestBody AiModelSelectionRequest request)
+    {
+        return AjaxResult.success(configService.addModels(request.getModelCodes()));
+    }
+
+    @PreAuthorize("@ss.hasPermi('ai:config:edit')")
+    @Log(title = "AI 模型移除", businessType = BusinessType.DELETE)
+    @DeleteMapping("/models/{modelId}")
+    public AjaxResult removeModel(@PathVariable Long modelId)
+    {
+        configService.removeModel(modelId);
+        return AjaxResult.success();
     }
 
     @PreAuthorize("@ss.hasPermi('ai:config:view')")
