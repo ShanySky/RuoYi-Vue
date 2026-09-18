@@ -281,6 +281,15 @@ jobs:
           test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_message where role='ASSISTANT' and content='AI_OK:mock-agent-model:high' and model_code='mock-agent-model' and reasoning_effort='high'" ry-vue)" -ge 1
           test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_message where role='ASSISTANT' and content='AI_OK:mock-secondary-model:low' and model_code='mock-secondary-model' and reasoning_effort='low'" ry-vue)" -ge 1
           test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from (select conversation_id from ai_message where role='ASSISTANT' and model_code is not null group by conversation_id having count(distinct model_code) >= 2) x" ry-vue)" -ge 1
+
+          # Phase-three Run control must be true in the backend, not only hidden by the browser.
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_run where status='CANCELLED' and cancel_reason='USER_STOP'" ry-vue)" -ge 1
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_run where status='CANCELLED' and cancel_reason='DOUBLE_ESC'" ry-vue)" -ge 1
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_run where status='SUPERSEDED' and cancel_reason='STEERING'" ry-vue)" -ge 1
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_message where role='ASSISTANT' and content in ('SLOW_STOP_DONE','SLOW_ESC_DONE','STEER_OLD_DONE')" ry-vue)" = "0"
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_message where role='ASSISTANT' and content='STEER_NEW_OK'" ry-vue)" -ge 1
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select chat_font_size from ai_user_preference where user_id=1" ry-vue)" = "standard"
+
           sleep 2
           test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from sys_oper_log where title='AI 服务配置' and oper_param like '%e2e-provider-placeholder%'" ry-vue)" = "0"
           test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_provider where token_cipher like 'v1:%' and token_cipher not like '%e2e-provider-placeholder%'" ry-vue)" = "1"
