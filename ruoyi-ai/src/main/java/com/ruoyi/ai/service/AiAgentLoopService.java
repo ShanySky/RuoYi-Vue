@@ -103,7 +103,7 @@ public class AiAgentLoopService
             selectedModelId = defaultModel.getModelId();
         }
 
-        AiModel model = configService.requireModel(selectedModelId);
+        AiModel model = configService.requireEnabledSystemModel(selectedModelId);
         boolean sameModel = selectedModelId.equals(conversation.getModelId());
         String requestedEffort = request.getReasoningEffort();
         String effort;
