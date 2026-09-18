@@ -1,44 +1,12 @@
 package com.ruoyi.ai.domain;
-
 import java.util.Date;
-
-public class AiMessage
-{
-    private Long messageId;
-    private Long conversationId;
-    private Integer sequenceNo;
-    private String role;
-    private String content;
-    private String toolCallId;
-    private String toolName;
-    private String toolArguments;
-    private Long modelId;
-    private String modelCode;
-    private String reasoningEffort;
-    private Date createTime;
-
-    public Long getMessageId() { return messageId; }
-    public void setMessageId(Long messageId) { this.messageId = messageId; }
-    public Long getConversationId() { return conversationId; }
-    public void setConversationId(Long conversationId) { this.conversationId = conversationId; }
-    public Integer getSequenceNo() { return sequenceNo; }
-    public void setSequenceNo(Integer sequenceNo) { this.sequenceNo = sequenceNo; }
-    public String getRole() { return role; }
-    public void setRole(String role) { this.role = role; }
-    public String getContent() { return content; }
-    public void setContent(String content) { this.content = content; }
-    public String getToolCallId() { return toolCallId; }
-    public void setToolCallId(String toolCallId) { this.toolCallId = toolCallId; }
-    public String getToolName() { return toolName; }
-    public void setToolName(String toolName) { this.toolName = toolName; }
-    public String getToolArguments() { return toolArguments; }
-    public void setToolArguments(String toolArguments) { this.toolArguments = toolArguments; }
-    public Long getModelId() { return modelId; }
-    public void setModelId(Long modelId) { this.modelId = modelId; }
-    public String getModelCode() { return modelCode; }
-    public void setModelCode(String modelCode) { this.modelCode = modelCode; }
-    public String getReasoningEffort() { return reasoningEffort; }
-    public void setReasoningEffort(String reasoningEffort) { this.reasoningEffort = reasoningEffort; }
-    public Date getCreateTime() { return createTime; }
-    public void setCreateTime(Date createTime) { this.createTime = createTime; }
+public class AiMessage {
+ private Long messageId,conversationId,modelId,runId; private Integer sequenceNo; private String role,content,toolCallId,toolName,toolArguments,modelCode,reasoningEffort; private Date createTime;
+ public Long getMessageId(){return messageId;} public void setMessageId(Long v){messageId=v;} public Long getConversationId(){return conversationId;} public void setConversationId(Long v){conversationId=v;}
+ public Integer getSequenceNo(){return sequenceNo;} public void setSequenceNo(Integer v){sequenceNo=v;} public String getRole(){return role;} public void setRole(String v){role=v;}
+ public String getContent(){return content;} public void setContent(String v){content=v;} public String getToolCallId(){return toolCallId;} public void setToolCallId(String v){toolCallId=v;}
+ public String getToolName(){return toolName;} public void setToolName(String v){toolName=v;} public String getToolArguments(){return toolArguments;} public void setToolArguments(String v){toolArguments=v;}
+ public Long getModelId(){return modelId;} public void setModelId(Long v){modelId=v;} public String getModelCode(){return modelCode;} public void setModelCode(String v){modelCode=v;}
+ public String getReasoningEffort(){return reasoningEffort;} public void setReasoningEffort(String v){reasoningEffort=v;} public Long getRunId(){return runId;} public void setRunId(Long v){runId=v;}
+ public Date getCreateTime(){return createTime;} public void setCreateTime(Date v){createTime=v;}
 }
