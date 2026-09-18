@@ -25,6 +25,7 @@ create table if not exists ai_model (
   default_model     char(1)         not null default '1'       comment '0默认 1普通',
   tool_capability   varchar(16)     not null default 'UNKNOWN' comment 'UNKNOWN/SUPPORTED/UNSUPPORTED',
   reasoning_capability varchar(16)  not null default 'UNKNOWN' comment 'UNKNOWN/SUPPORTED/UNSUPPORTED',
+  reasoning_efforts varchar(128)    default null               comment '已验证支持的思考档位，逗号分隔',
   default_reasoning_effort varchar(16) default null             comment '默认思考档位，null 表示 Provider 默认',
   last_sync_time    datetime        default null,
   create_by         varchar(64)     default '',
