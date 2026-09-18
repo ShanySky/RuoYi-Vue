@@ -102,6 +102,10 @@ jobs:
                   ), '')
                   if body.get('prompt_cache_key'):
                       print('CACHE_KEY=' + str(body.get('prompt_cache_key')), flush=True)
+                  if 'CACHE_UNSUPPORTED_PROVIDER_TEST' in latest_user and body.get('prompt_cache_key'):
+                      print('CACHE_UNSUPPORTED_REJECTED=1', flush=True)
+                      self.send_json(400, {'error': {'message': 'Unsupported parameter: prompt_cache_key'}})
+                      return
                   if is_compaction:
                       compaction_system = next((msg.get('content') or '' for msg in messages if msg.get('role') == 'system'), '')
                       if '## 任务主线' in compaction_system and '## Tool 与确认状态' in compaction_system:
@@ -109,6 +113,9 @@ jobs:
                       if 'LONG_CONTEXT_A:' in latest_user:
                           print('COMPACTION_SOURCE_HAS_A=1', flush=True)
                       message = {'role':'assistant','content':'CHECKPOINT_OK\n## 任务主线\n- 当前主题：LONG_CONTEXT\n- 最终目标：继续处理最新用户指令\n## 已完成工作与真实结果\n- 已完成工作：LONG_CONTEXT_A 已处理\n## 待办与下一步\n- 下一步：处理 LONG_CONTEXT_B'}
+                      finish = 'stop'
+                  elif 'CACHE_UNSUPPORTED_PROVIDER_TEST' in latest_user:
+                      message = {'role':'assistant','content':'CACHE_FALLBACK_OK'}
                       finish = 'stop'
                   elif 'LONG_CONTEXT_B:' in latest_user:
                       if 'CHECKPOINT_OK' in checkpoint_system and latest_user.startswith('LONG_CONTEXT_B:'):
@@ -221,6 +228,12 @@ jobs:
           test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_pending_tool_call where conversation_id=$CONV_ID and status='RESOLVED'" ry-vue)" = "2"
           mysql -h127.0.0.1 -uroot -ppassword -Nse "select concat((select count(*) from ai_conversation),' ',(select count(*) from ai_message),' ',(select count(*) from ai_pending_tool_call where status='RESOLVED'))" ry-vue
 
+          CACHE_FALLBACK=$(curl -fsS -H "$AUTH" -H 'Content-Type: application/json' \
+            -d "{\"modelId\":$MODEL_ID,\"userMessage\":\"CACHE_UNSUPPORTED_PROVIDER_TEST\",\"route\":\"/index\",\"pageContext\":{},\"frontendTools\":[]}" \
+            http://127.0.0.1:8080/ai/chat/turn)
+          printf '%s' "$CACHE_FALLBACK" | tee /tmp/cache-fallback-response.json | python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["type"]=="MESSAGE"; assert d["message"]=="CACHE_FALLBACK_OK"'
+          grep -q "CACHE_UNSUPPORTED_REJECTED=1" /tmp/mock-openai.log
+
           # Force a low context budget so automatic compaction can be verified quickly.
           curl -fsS -H "$AUTH" -H 'Content-Type: application/json' -X PUT             -d '{"contextWindowTokens":8192,"autoCompaction":true,"compactionThresholdPercent":50}'             "http://127.0.0.1:8080/ai/config/models/$MODEL_ID/runtime-settings"             | python3 -c 'import json,sys; assert json.load(sys.stdin)["code"]==200'
 
@@ -271,4 +284,5 @@ jobs:
             /tmp/turn2-response.json
             /tmp/turn3-response.json
             /tmp/turn4-response.json
+            /tmp/cache-fallback-response.json
           if-no-files-found: warn
