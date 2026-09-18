@@ -48,6 +48,9 @@ public class AiFrontendToolPolicy
         allowlist.put("page_monitor_operlog_view", new ToolPolicy(
                 "READ", "monitor:operlog:query", "查看指定操作日志详情",
                 objectSchema(Map.of("operId", Map.of("type", "integer", "description", "操作日志ID")), List.of("operId"))));
+        allowlist.put("page_monitor_cache_list_keys", new ToolPolicy(
+                "READ", "monitor:cache:list", "列出指定缓存名称下的键名",
+                objectSchema(Map.of("cacheName", Map.of("type", "string")), List.of("cacheName"))));
         allowlist.put("page_monitor_cache_list_view_value", new ToolPolicy(
                 "READ", "monitor:cache:list", "查看指定缓存键当前值",
                 objectSchema(Map.of(
