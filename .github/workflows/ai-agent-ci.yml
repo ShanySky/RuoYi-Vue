@@ -298,6 +298,7 @@ jobs:
           print(json.dumps({"conversationId":cid,"modelId":mid,"userMessage":"NO_REPEAT_PADDING_A:"+("W"*11800),"route":"/system/user","pageContext":{"pageName":"用户管理"}}, ensure_ascii=False))
           PY
           curl -fsS -H "$AUTH" -H 'Content-Type: application/json' --data-binary @/tmp/no-repeat-a.json http://127.0.0.1:8080/ai/chat/turn \
+            | tee /tmp/no-repeat-padding-response.json \
             | python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["type"]=="MESSAGE"; assert d["message"]=="AI_OK"'
 
           python3 - "$WRITE_CONV_ID" "$MODEL_ID" <<'PY' >/tmp/no-repeat-b.json
@@ -331,5 +332,6 @@ jobs:
             /tmp/turn3-response.json
             /tmp/turn4-response.json
             /tmp/cache-fallback-response.json
+            /tmp/no-repeat-padding-response.json
             /tmp/no-repeat-response.json
           if-no-files-found: warn
