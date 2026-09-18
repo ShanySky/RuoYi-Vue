@@ -13,6 +13,7 @@ public class AiContextService {
   if(estimate < (long)window*threshold/100)return latest;
   int latestUser=messages.latestUserSequence(conversation.getConversationId());int cutoff=latestUser-1;if(cutoff<=covered)return latest;
   List<AiMessage> segment=messages.selectRange(conversation.getConversationId(),covered,cutoff);if(segment.isEmpty())return latest;
+  if(!runs.beginCompaction(run.getRunId()))return latest;
   AiPrompt cpPrompt=prompts.require(AiPromptService.COMPACTION);StringBuilder payload=new StringBuilder();
   if(latest!=null&&StringUtils.isNotBlank(latest.getSummary()))payload.append("已有 Checkpoint：\n").append(latest.getSummary()).append("\n\n");
   payload.append("需要压缩的后续历史：\n");appendCompactionHistory(payload,segment);
@@ -32,8 +33,9 @@ public class AiContextService {
    }
    runs.recordUsage(run.getRunId(),response);
    if(response==null||response.getResult()==null||response.getResult().getOutput()==null||StringUtils.isBlank(response.getResult().getOutput().getText()))throw new ServiceException("上下文压缩未返回有效 Checkpoint");
+   if(!runs.endCompaction(run.getRunId()))return latest;
    AiCheckpoint cp=new AiCheckpoint();cp.setConversationId(conversation.getConversationId());cp.setRunId(run.getRunId());cp.setCoveredSequenceNo(cutoff);cp.setSummary(response.getResult().getOutput().getText().trim());cp.setModelId(model.getModelId());cp.setModelCode(model.getModelCode());cp.setEstimatedTokens(estimate);cp.setStatus("ACTIVE");checkpoints.insert(cp);return cp;
-  }catch(InterruptedException e){Thread.interrupted();return latest;}catch(ServiceException e){throw e;}catch(Exception e){throw new ServiceException("上下文压缩失败："+safe(e));}
+  }catch(InterruptedException e){Thread.interrupted();return latest;}catch(ServiceException e){runs.endCompaction(run.getRunId());throw e;}catch(Exception e){runs.endCompaction(run.getRunId());throw new ServiceException("上下文压缩失败："+safe(e));}
  }
  private void appendCompactionHistory(StringBuilder payload,List<AiMessage> segment){
   Map<Long,AiRun> runStates=new HashMap<>();
