@@ -18,6 +18,7 @@ public class AiRunService {
  public void complete(Long runId){runs.complete(runId);inFlight.remove(runId);}
  public void fail(Long runId,String reason){runs.fail(runId,reason);inFlight.remove(runId);}
  public AiRun cancel(Long runId,Long userId,String reason){requireOwned(runId,userId);runs.updateOwnedState(runId,userId,"CANCELLED",reason);pending.cancelByRun(runId,"CANCELLED");Future<?> f=inFlight.remove(runId);if(f!=null)f.cancel(true);return runs.selectById(runId);} public AiRun cancelByClientKey(String key,Long userId,String reason){AiRun r=byClientKey(key,userId);return cancel(r.getRunId(),userId,reason);}
+ public int cancelAllOwned(Long userId,String reason){int count=0;for(AiRun r:runs.selectActiveByUser(userId)){cancel(r.getRunId(),userId,reason);count++;}return count;}
  public ChatResponse call(Long runId,Callable<ChatResponse> action) throws Exception {
   if(!runnable(runId))throw new InterruptedException("run is not active");
   Future<ChatResponse> f=executor.submit(action);inFlight.put(runId,f);
