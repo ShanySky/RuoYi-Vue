@@ -258,7 +258,10 @@ jobs:
           PROVIDER_URL: http://127.0.0.1:18080/v1
           PROVIDER_TOKEN: e2e-provider-placeholder
           TEST_NICKNAME: AI闭环测试
-        run: node tests/ai-agent-e2e.mjs
+        shell: bash
+        run: |
+          set -o pipefail
+          node tests/ai-agent-e2e.mjs 2>&1 | tee /tmp/ai-agent-e2e.log
 
       - name: Verify persistence, audit redaction and Agent state
         run: |
@@ -279,6 +282,7 @@ jobs:
           name: ai-agent-fullstack-e2e
           path: |
             frontend/test-results/
+            /tmp/ai-agent-e2e.log
             /tmp/ruoyi-backend.log
             /tmp/ruoyi-frontend.log
             /tmp/mock-openai.log
