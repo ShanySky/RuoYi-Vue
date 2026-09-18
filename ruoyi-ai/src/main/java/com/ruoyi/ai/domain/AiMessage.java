@@ -12,6 +12,9 @@ public class AiMessage
     private String toolCallId;
     private String toolName;
     private String toolArguments;
+    private Long modelId;
+    private String modelCode;
+    private String reasoningEffort;
     private Date createTime;
 
     public Long getMessageId() { return messageId; }
@@ -30,6 +33,12 @@ public class AiMessage
     public void setToolName(String toolName) { this.toolName = toolName; }
     public String getToolArguments() { return toolArguments; }
     public void setToolArguments(String toolArguments) { this.toolArguments = toolArguments; }
+    public Long getModelId() { return modelId; }
+    public void setModelId(Long modelId) { this.modelId = modelId; }
+    public String getModelCode() { return modelCode; }
+    public void setModelCode(String modelCode) { this.modelCode = modelCode; }
+    public String getReasoningEffort() { return reasoningEffort; }
+    public void setReasoningEffort(String reasoningEffort) { this.reasoningEffort = reasoningEffort; }
     public Date getCreateTime() { return createTime; }
     public void setCreateTime(Date createTime) { this.createTime = createTime; }
 }
