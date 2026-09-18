@@ -254,6 +254,9 @@ jobs:
         run: |
           test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select nick_name from sys_user where user_id=2" ry-vue)" = "AI闭环测试"
           test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_pending_tool_call where status='RESOLVED'" ry-vue)" -ge 4
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_message where role='ASSISTANT' and content='AI_OK:mock-agent-model:high' and model_code='mock-agent-model' and reasoning_effort='high'" ry-vue)" -ge 1
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_message where role='ASSISTANT' and content='AI_OK:mock-secondary-model:low' and model_code='mock-secondary-model' and reasoning_effort='low'" ry-vue)" -ge 1
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from (select conversation_id from ai_message where role='ASSISTANT' and model_code is not null group by conversation_id having count(distinct model_code) >= 2) x" ry-vue)" -ge 1
           sleep 2
           test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from sys_oper_log where title='AI 服务配置' and oper_param like '%e2e-provider-placeholder%'" ry-vue)" = "0"
           test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_provider where token_cipher like 'v1:%' and token_cipher not like '%e2e-provider-placeholder%'" ry-vue)" = "1"
