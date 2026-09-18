@@ -59,7 +59,7 @@ public class AiFrontendToolPolicy
             {
                 continue;
             }
-            ToolPolicy policy = allowlist.get(candidate.getName());
+            ToolPolicy policy = resolvePolicy(candidate.getName());
             if (policy == null || !hasPermission(policy.requiredPermission()))
             {
                 continue;
@@ -80,12 +80,123 @@ public class AiFrontendToolPolicy
 
     public ToolPolicy requirePolicy(String toolName)
     {
-        ToolPolicy policy = allowlist.get(toolName);
+        ToolPolicy policy = resolvePolicy(toolName);
         if (policy == null)
         {
             throw new IllegalArgumentException("Unsupported frontend tool: " + toolName);
         }
         return policy;
+    }
+
+    private ToolPolicy resolvePolicy(String toolName)
+    {
+        ToolPolicy exact = allowlist.get(toolName);
+        if (exact != null)
+        {
+            return exact;
+        }
+        return deriveCrudPolicy(toolName);
+    }
+
+    private ToolPolicy deriveCrudPolicy(String toolName)
+    {
+        if (toolName == null || !toolName.startsWith("page_"))
+        {
+            return null;
+        }
+
+        String[] actionSuffixes = {
+                "reset_password", "change_status", "add_set_fields", "edit_set_fields",
+                "add_submit", "edit_submit", "import_open", "auth_role", "auth_user",
+                "add_open", "edit_open", "search", "reset", "delete", "export", "view"
+        };
+
+        String action = null;
+        String resourcePart = null;
+        for (String suffix : actionSuffixes)
+        {
+            String marker = "_" + suffix;
+            if (toolName.endsWith(marker))
+            {
+                action = suffix;
+                resourcePart = toolName.substring("page_".length(), toolName.length() - marker.length());
+                break;
+            }
+        }
+        if (action == null || resourcePart == null)
+        {
+            return null;
+        }
+
+        int split = resourcePart.indexOf('_');
+        if (split <= 0 || split >= resourcePart.length() - 1)
+        {
+            return null;
+        }
+        String module = resourcePart.substring(0, split);
+        String resource = resourcePart.substring(split + 1);
+        if (!module.matches("[a-zA-Z0-9]+") || !resource.matches("[a-zA-Z0-9_]+"))
+        {
+            return null;
+        }
+
+        String permissionAction;
+        String risk;
+        switch (action)
+        {
+            case "search", "reset", "view" -> {
+                permissionAction = "list";
+                risk = "READ";
+            }
+            case "add_open", "add_set_fields" -> {
+                permissionAction = "add";
+                risk = "UI";
+            }
+            case "add_submit" -> {
+                permissionAction = "add";
+                risk = "WRITE";
+            }
+            case "edit_open", "edit_set_fields", "auth_role", "auth_user" -> {
+                permissionAction = "edit";
+                risk = "UI";
+            }
+            case "edit_submit", "change_status" -> {
+                permissionAction = "edit";
+                risk = "WRITE";
+            }
+            case "delete" -> {
+                permissionAction = "remove";
+                risk = "DANGEROUS_WRITE";
+            }
+            case "reset_password" -> {
+                permissionAction = "resetPwd";
+                risk = "DANGEROUS_WRITE";
+            }
+            case "export" -> {
+                permissionAction = "export";
+                risk = "READ";
+            }
+            case "import_open" -> {
+                permissionAction = "import";
+                risk = "UI";
+            }
+            default -> {
+                return null;
+            }
+        }
+
+        String permission = module + ":" + resource.replace('_', ':') + ":" + permissionAction;
+        String description = "执行当前页面已注册的语义化业务动作 " + action
+                + "；字段、记录和动作范围以当前 Page Context 为准，不能越过 RuoYi 后端权限与数据范围";
+        return new ToolPolicy(risk, permission, description, flexibleObjectSchema());
+    }
+
+    private static Map<String, Object> flexibleObjectSchema()
+    {
+        Map<String, Object> schema = new LinkedHashMap<>();
+        schema.put("type", "object");
+        schema.put("additionalProperties", true);
+        return Map.copyOf(schema);
     }
 
     private static Map<String, Object> objectSchema(Map<String, ?> properties, List<String> required)
