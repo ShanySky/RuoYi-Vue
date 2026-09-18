@@ -17,6 +17,10 @@ public class AiFrontendToolPolicy
     public AiFrontendToolPolicy(PermissionService permissionService)
     {
         this.permissionService = permissionService;
+        allowlist.put("app_navigate", new ToolPolicy(
+                "UI", null, "导航到当前登录用户有权访问的 RuoYi 页面；导航本身不授予任何后端业务权限",
+                objectSchema(Map.of("path", Map.of("type", "string", "description", "目标页面绝对路径")),
+                        List.of("path"))));
         allowlist.put("page_system_user_search", new ToolPolicy(
                 "READ", "system:user:list", "在当前用户管理页设置查询条件并查询用户",
                 objectSchema(Map.of(
@@ -56,7 +60,7 @@ public class AiFrontendToolPolicy
                 continue;
             }
             ToolPolicy policy = allowlist.get(candidate.getName());
-            if (policy == null || !permissionService.hasPermi(policy.requiredPermission()))
+            if (policy == null || !hasPermission(policy.requiredPermission()))
             {
                 continue;
             }
@@ -67,6 +71,11 @@ public class AiFrontendToolPolicy
                     policy.riskLevel(), policy.requiredPermission()));
         }
         return approved;
+    }
+
+    private boolean hasPermission(String permission)
+    {
+        return permission == null || permission.isBlank() || permissionService.hasPermi(permission);
     }
 
     public ToolPolicy requirePolicy(String toolName)
