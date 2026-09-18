@@ -23,10 +23,15 @@ public class AiAgentModelFactory
 
     public ModelRuntime create(Long modelId, List<ToolCallback> tools)
     {
-        return create(modelId, tools, null);
+        return create(modelId, tools, null, null);
     }
 
     public ModelRuntime create(Long modelId, List<ToolCallback> tools, String reasoningEffort)
+    {
+        return create(modelId, tools, reasoningEffort, null);
+    }
+
+    public ModelRuntime create(Long modelId, List<ToolCallback> tools, String reasoningEffort, String promptCacheKey)
     {
         AiModel model = configService.requireModel(modelId);
         if (!"0".equals(model.getEnabled()))
@@ -50,6 +55,10 @@ public class AiAgentModelFactory
         if (reasoningEffort != null && !reasoningEffort.isBlank())
         {
             builder.reasoningEffort(reasoningEffort);
+        }
+        if (promptCacheKey != null && !promptCacheKey.isBlank())
+        {
+            builder.promptCacheKey(promptCacheKey);
         }
         OpenAiChatOptions options = builder.build();
         OpenAiChatModel chatModel = OpenAiChatModel.builder().options(options).build();

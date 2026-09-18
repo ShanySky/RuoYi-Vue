@@ -11,6 +11,8 @@ public class AiChatTurnRequest
     private String userMessage;
     private AiToolResultRequest toolResult;
     private String route;
+    private String pageInstanceId;
+    private Long pageVersion;
     private Map<String, Object> pageContext;
     private List<AiFrontendToolDefinition> frontendTools;
 
@@ -26,6 +28,10 @@ public class AiChatTurnRequest
     public void setToolResult(AiToolResultRequest toolResult) { this.toolResult = toolResult; }
     public String getRoute() { return route; }
     public void setRoute(String route) { this.route = route; }
+    public String getPageInstanceId() { return pageInstanceId; }
+    public void setPageInstanceId(String pageInstanceId) { this.pageInstanceId = pageInstanceId; }
+    public Long getPageVersion() { return pageVersion; }
+    public void setPageVersion(Long pageVersion) { this.pageVersion = pageVersion; }
     public Map<String, Object> getPageContext() { return pageContext; }
     public void setPageContext(Map<String, Object> pageContext) { this.pageContext = pageContext; }
     public List<AiFrontendToolDefinition> getFrontendTools() { return frontendTools; }
