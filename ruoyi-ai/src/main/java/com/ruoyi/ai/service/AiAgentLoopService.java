@@ -124,11 +124,7 @@ public class AiAgentLoopService
         }
         catch (ServiceException e)
         {
-            AiRun latest = runService.get(run.getRunId());
-            if (latest != null && ("RUNNING".equals(latest.getStatus()) || "WAITING_TOOL".equals(latest.getStatus()) || "COMPACTING".equals(latest.getStatus())))
-            {
-                runService.fail(run.getRunId(), safeMessage(e));
-            }
+            runService.fail(run.getRunId(), safeMessage(e));
             throw e;
         }
     }
