@@ -291,13 +291,13 @@ jobs:
 
           # Completed WRITE must survive compaction as checkpoint history and must not be emitted again.
           WRITE_START=$(curl -fsS -H "$AUTH" -H 'Content-Type: application/json' \
-            -d "{\"modelId\":$MODEL_ID,\"userMessage\":\"NO_REPEAT_WRITE_SETUP\",\"route\":\"/system/user\",\"pageContext\":{\"pageName\":\"用户管理\"},\"frontendTools\":[{\"name\":\"page_system_user_edit_submit\",\"description\":\"提交用户编辑\",\"inputSchema\":{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}}]}" \
+            -d "{\"modelId\":$MODEL_ID,\"userMessage\":\"NO_REPEAT_WRITE_SETUP\",\"capabilityProtocol\":\"ruoyi-semantic-page-v1\",\"pageId\":\"system.user\",\"route\":\"/system/user\",\"pageInstanceId\":\"system.user:ci\",\"pageVersion\":1,\"pageContext\":{\"pageName\":\"用户管理\"},\"frontendTools\":[{\"name\":\"page_system_user_edit_submit\",\"description\":\"提交用户编辑\",\"inputSchema\":{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}}]}" \
             http://127.0.0.1:8080/ai/chat/turn)
           printf '%s' "$WRITE_START" | tee /tmp/no-repeat-write-start.json >/dev/null
           WRITE_CONV_ID=$(printf '%s' "$WRITE_START" | python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["type"]=="TOOL_CALL"; assert d["toolCall"]["name"]=="page_system_user_edit_submit"; print(d["conversationId"])')
           WRITE_CALL_ID=$(printf '%s' "$WRITE_START" | python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["toolCall"]["callId"])')
           curl -fsS -H "$AUTH" -H 'Content-Type: application/json' \
-            -d "{\"conversationId\":$WRITE_CONV_ID,\"toolResult\":{\"callId\":\"$WRITE_CALL_ID\",\"success\":true,\"result\":{\"saved\":true,\"marker\":\"WRITE_ALREADY_DONE\"}},\"route\":\"/system/user\",\"pageContext\":{\"pageName\":\"用户管理\"},\"frontendTools\":[{\"name\":\"page_system_user_edit_submit\",\"description\":\"提交用户编辑\",\"inputSchema\":{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}}]}" \
+            -d "{\"conversationId\":$WRITE_CONV_ID,\"toolResult\":{\"callId\":\"$WRITE_CALL_ID\",\"success\":true,\"result\":{\"saved\":true,\"marker\":\"WRITE_ALREADY_DONE\"}},\"capabilityProtocol\":\"ruoyi-semantic-page-v1\",\"pageId\":\"system.user\",\"route\":\"/system/user\",\"pageInstanceId\":\"system.user:ci\",\"pageVersion\":1,\"pageContext\":{\"pageName\":\"用户管理\"},\"frontendTools\":[{\"name\":\"page_system_user_edit_submit\",\"description\":\"提交用户编辑\",\"inputSchema\":{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}}]}" \
             http://127.0.0.1:8080/ai/chat/turn \
             | tee /tmp/no-repeat-write-result.json \
             | python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["type"]=="MESSAGE"; assert d["message"]=="TOOL_RESULT_ACCEPTED"'
