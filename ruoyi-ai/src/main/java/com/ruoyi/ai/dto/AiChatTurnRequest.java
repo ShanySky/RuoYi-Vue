@@ -11,6 +11,8 @@ public class AiChatTurnRequest
     private String reasoningEffort;
     private String userMessage;
     private AiToolResultRequest toolResult;
+    private String capabilityProtocol;
+    private String pageId;
     private String route;
     private String pageInstanceId;
     private Long pageVersion;
@@ -29,6 +31,10 @@ public class AiChatTurnRequest
     public void setUserMessage(String userMessage) { this.userMessage = userMessage; }
     public AiToolResultRequest getToolResult() { return toolResult; }
     public void setToolResult(AiToolResultRequest toolResult) { this.toolResult = toolResult; }
+    public String getCapabilityProtocol() { return capabilityProtocol; }
+    public void setCapabilityProtocol(String capabilityProtocol) { this.capabilityProtocol = capabilityProtocol; }
+    public String getPageId() { return pageId; }
+    public void setPageId(String pageId) { this.pageId = pageId; }
     public String getRoute() { return route; }
     public void setRoute(String route) { this.route = route; }
     public String getPageInstanceId() { return pageInstanceId; }
