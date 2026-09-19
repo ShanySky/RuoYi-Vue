@@ -24,9 +24,13 @@ public class AiCapabilityProtocolValidator
         {
             throw new ServiceException("页面能力协议无效，仅支持 " + PROTOCOL_V1);
         }
-        requireText(request.getPageId(), "pageId");
-        requireText(request.getRoute(), "route");
-        requireText(request.getPageInstanceId(), "pageInstanceId");
+        requireText(request.getPageId(), "pageId", 128);
+        requireText(request.getRoute(), "route", 255);
+        requireText(request.getPageInstanceId(), "pageInstanceId", 64);
+        if (!request.getRoute().startsWith("/"))
+        {
+            throw new ServiceException("页面能力运行时无效：route 必须为绝对路径");
+        }
         if (request.getPageVersion() == null || request.getPageVersion() <= 0)
         {
             throw new ServiceException("页面能力运行时不完整：pageVersion 必须为正整数");
@@ -77,11 +81,15 @@ public class AiCapabilityProtocolValidator
         }
     }
 
-    private void requireText(String value, String field)
+    private void requireText(String value, String field, int maxLength)
     {
         if (StringUtils.isBlank(value))
         {
             throw new ServiceException("页面能力运行时不完整：缺少 " + field);
+        }
+        if (value.length() > maxLength)
+        {
+            throw new ServiceException("页面能力运行时无效：" + field + " 长度超过 " + maxLength);
         }
     }
 }

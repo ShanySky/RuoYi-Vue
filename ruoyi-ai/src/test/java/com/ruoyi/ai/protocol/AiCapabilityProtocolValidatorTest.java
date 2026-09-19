@@ -57,6 +57,25 @@ class AiCapabilityProtocolValidatorTest
         assertThrows(ServiceException.class, () -> validator.validateRequest(request));
     }
 
+
+    @Test
+    void rejectsRuntimeIdentityThatCannotBePersistedLosslessly()
+    {
+        AiChatTurnRequest request = validRequest();
+        request.setPageInstanceId("x".repeat(65));
+        assertThrows(ServiceException.class, () -> validator.validateRequest(request));
+
+        request = validRequest();
+        request.setRoute("system/user");
+        AiChatTurnRequest relativeRoute = request;
+        assertThrows(ServiceException.class, () -> validator.validateRequest(relativeRoute));
+
+        request = validRequest();
+        request.setPageId("x".repeat(129));
+        AiChatTurnRequest longPageId = request;
+        assertThrows(ServiceException.class, () -> validator.validateRequest(longPageId));
+    }
+
     @Test
     void continuationMustMatchPendingSemanticPageSnapshot()
     {
