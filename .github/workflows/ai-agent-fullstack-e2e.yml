@@ -193,6 +193,10 @@ jobs:
                   elif 'STEER_OLD' in latest_user:
                       time.sleep(4)
                       message = {'role': 'assistant', 'content': 'STEER_OLD_DONE'}
+                  elif 'STEER_COMPACT_NEW' in latest_user:
+                      message = {'role': 'assistant', 'content': 'STEER_COMPACT_NEW_OK'}
+                  elif 'STEER_AFTER_WRITE_NEW' in latest_user:
+                      message = {'role': 'assistant', 'content': 'WRITE_COMPLETED_THEN_STEERED'}
                   elif 'STEER_NEW' in latest_user:
                       message = {'role': 'assistant', 'content': 'STEER_NEW_OK'}
                   elif 'STEER_CANCEL_WRITE' in latest_user:
@@ -294,6 +298,7 @@ jobs:
                       )
                       runtime_isolation = 'RUNTIME_ISOLATION' in latest_user
                       steer_write_old = 'STEER_WRITE_OLD' in latest_user
+                      steer_write_done_old = 'STEER_WRITE_DONE_OLD' in latest_user
                       tool_results = [msg for msg in messages if msg.get('role') == 'tool']
                       step = len(tool_results)
                       if runtime_isolation and step > 0:
@@ -313,14 +318,21 @@ jobs:
                           message = tool_call('page_system_user_edit_open', {'userId': 2})
                           finish = 'tool_calls'
                       elif step == 2:
-                          nickname = 'SHOULD_NOT_SAVE' if steer_write_old else 'AI闭环测试'
+                          nickname = (
+                              'SHOULD_NOT_SAVE' if steer_write_old
+                              else ('STEER_WRITE_DONE_ONCE' if steer_write_done_old else 'AI闭环测试')
+                          )
                           message = tool_call('page_system_user_edit_set_fields', {'nickName': nickname})
                           finish = 'tool_calls'
                       elif step == 3:
                           message = tool_call('page_system_user_edit_submit', {})
                           finish = 'tool_calls'
                       else:
-                          message = {'role': 'assistant', 'content': 'E2E_DONE'}
+                          if steer_write_done_old:
+                              time.sleep(4)
+                              message = {'role': 'assistant', 'content': 'STEER_WRITE_DONE_OLD_FINISHED'}
+                          else:
+                              message = {'role': 'assistant', 'content': 'E2E_DONE'}
                   else:
                       message = {
                           'role': 'assistant',
@@ -453,7 +465,14 @@ jobs:
           test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_checkpoint where summary like '%DEFAULT_COMPACTION_APPLIED%'" ry-vue)" -ge 1
           test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_run r join ai_conversation c on c.conversation_id=r.conversation_id where c.title like 'UI_COMPACT_STOP_ONE%' and r.status='CANCELLED' and r.cancel_reason='USER_STOP'" ry-vue)" -ge 1
           test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_run r join ai_conversation c on c.conversation_id=r.conversation_id where c.title like 'UI_COMPACT_RELOAD_ONE%' and r.status='CANCELLED' and r.cancel_reason='CLIENT_RELOAD'" ry-vue)" -ge 1
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_run r join ai_conversation c on c.conversation_id=r.conversation_id where c.title like 'UI_COMPACT_STEER_ONE%' and r.status='SUPERSEDED' and r.cancel_reason='STEERING'" ry-vue)" -ge 1
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_checkpoint cp join ai_run r on r.run_id=cp.run_id join ai_conversation c on c.conversation_id=r.conversation_id where c.title like 'UI_COMPACT_STEER_ONE%' and r.status='SUPERSEDED' and r.cancel_reason='STEERING'" ry-vue)" = "0"
           test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_checkpoint c join ai_conversation v on v.conversation_id=c.conversation_id where v.title like 'UI_COMPACT_STOP_ONE%' or v.title like 'UI_COMPACT_RELOAD_ONE%'" ry-vue)" = "0"
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_message where role='ASSISTANT' and content='STEER_COMPACT_NEW_OK'" ry-vue)" -ge 1
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_message where role='ASSISTANT' and content='WRITE_COMPLETED_THEN_STEERED'" ry-vue)" -ge 1
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_message where role='ASSISTANT' and content='STEER_WRITE_DONE_OLD_FINISHED'" ry-vue)" = "0"
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_pending_tool_call where tool_name like 'page_%' and (capability_protocol is null or capability_protocol<>'ruoyi-semantic-page-v1' or page_id is null or page_id='' or route is null or route='' or page_instance_id is null or page_instance_id='' or page_version is null)" ry-vue)" = "0"
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_pending_tool_call where capability_protocol='ruoyi-semantic-page-v1' and page_id='system.user' and route='/system/user'" ry-vue)" -ge 1
           test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_run r join ai_checkpoint c on c.run_id=r.run_id where c.summary like '%H_COMPACTION_APPLIED%' and r.compaction_prompt_version > 2" ry-vue)" -ge 1
           test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_message where role='ASSISTANT' and content='AI_OK:mock-agent-model:none' and reasoning_effort='none'" ry-vue)" -ge 1
           test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_message where role='ASSISTANT' and content='AI_OK:mock-agent-model:max' and reasoning_effort='max'" ry-vue)" -ge 1
