@@ -47,8 +47,12 @@ jobs:
           mysql -h127.0.0.1 -uroot -ppassword ry-vue < sql/ry_20260417.sql
           mysql -h127.0.0.1 -uroot -ppassword ry-vue < sql/quartz.sql
           mysql -h127.0.0.1 -uroot -ppassword ry-vue < sql/ai_20260918.sql
+          mysql -h127.0.0.1 -uroot -ppassword ry-vue < sql/ai_hardening_b1_b3_20260919.sql
           mysql -h127.0.0.1 -uroot -ppassword -e "update sys_config set config_value='false' where config_key='sys.account.captchaEnabled'" ry-vue
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='ry-vue' AND table_name LIKE 'ai_%';")" -ge "10"
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='ry-vue' AND table_name LIKE 'ai_%';")" -ge "11"
+
+      - name: Run focused AI hardening tests
+        run: mvn -B -pl ruoyi-ai -am test
 
       - name: Build backend
         shell: bash
