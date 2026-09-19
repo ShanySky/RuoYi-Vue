@@ -6,6 +6,7 @@ on:
   push:
     branches:
       - chatgpt/ai-agent-assistant
+      - chatgpt/ai-agent-hardening-b1-b3
     paths:
       - '.github/workflows/ai-agent-fullstack-e2e.yml'
       - 'ruoyi-ai/**'
