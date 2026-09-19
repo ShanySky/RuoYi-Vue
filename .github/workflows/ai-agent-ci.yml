@@ -324,6 +324,9 @@ jobs:
 
           curl -fsS -H "$AUTH" -H 'Content-Type: application/json' -X PUT             -d '{"contextWindowTokens":65536,"autoCompaction":true,"compactionThresholdPercent":75}'             "http://127.0.0.1:8080/ai/config/models/$MODEL_ID/runtime-settings" >/tmp/runtime-reset.json
 
+      - name: Run B1-B3 hardening acceptance
+        run: bash scripts/ci/ai-hardening-b1-b3-acceptance.sh
+
       - name: Upload diagnostic logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -340,6 +343,8 @@ jobs:
             /tmp/turn3-response.json
             /tmp/turn4-response.json
             /tmp/cache-fallback-response.json
+            /tmp/b3-disable.json
+            /tmp/b3-audit.json
             /tmp/no-repeat-write-start.json
             /tmp/no-repeat-write-result.json
             /tmp/no-repeat-padding-response.json
