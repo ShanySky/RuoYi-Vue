@@ -6,12 +6,13 @@ on:
   push:
     branches:
       - chatgpt/ai-agent-assistant
-      - chatgpt/ai-agent-hardening-b1-b3
+      - chatgpt/ai-agent-hardening-phase35-p0
     paths:
       - '.github/workflows/ai-agent-fullstack-e2e.yml'
       - 'ruoyi-ai/**'
-      - 'sql/ai_20260918.sql'
-      - 'sql/ai_hardening_b1_b3_20260919.sql'
+      - 'sql/ai_fresh_install.sql'
+      - 'sql/ai_migrations/**'
+      - 'scripts/ci/**'
   workflow_dispatch:
 
 jobs:
@@ -52,12 +53,14 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ShanySky/RuoYi-Vue3
-          ref: chatgpt/ai-agent-assistant
+          ref: ${{ github.ref_name == 'chatgpt/ai-agent-hardening-phase35-p0' && 'chatgpt/ai-agent-hardening-phase35-p0' || 'chatgpt/ai-agent-assistant' }}
           path: frontend
 
       - name: Record acceptance revisions
         run: |
           {
+            echo "BACKEND_REF=${{ github.ref_name }}"
+            echo "FRONTEND_REF=${{ github.ref_name == 'chatgpt/ai-agent-hardening-phase35-p0' && 'chatgpt/ai-agent-hardening-phase35-p0' || 'chatgpt/ai-agent-assistant' }}"
             echo "BACKEND_SHA=$(git -C backend rev-parse HEAD)"
             echo "FRONTEND_SHA=$(git -C frontend rev-parse HEAD)"
           } | tee /tmp/acceptance-revisions.txt
@@ -84,8 +87,7 @@ jobs:
         run: |
           mysql -h127.0.0.1 -uroot -ppassword ry-vue < backend/sql/ry_20260417.sql
           mysql -h127.0.0.1 -uroot -ppassword ry-vue < backend/sql/quartz.sql
-          mysql -h127.0.0.1 -uroot -ppassword ry-vue < backend/sql/ai_20260918.sql
-          mysql -h127.0.0.1 -uroot -ppassword ry-vue < backend/sql/ai_hardening_b1_b3_20260919.sql
+          mysql -h127.0.0.1 -uroot -ppassword ry-vue < backend/sql/ai_fresh_install.sql
           mysql -h127.0.0.1 -uroot -ppassword -e "update sys_config set config_value='false' where config_key='sys.account.captchaEnabled'; insert ignore into sys_role_menu(role_id,menu_id) values(2,118),(2,1061); insert into ai_conversation(user_id,model_id,reasoning_effort,title,route,status,create_time,update_time) values(1,null,null,'H_EXPIRED_CLEANUP','/index','ACTIVE',date_sub(sysdate(),interval 120 day),date_sub(sysdate(),interval 120 day));" ry-vue
 
       - name: Build backend
@@ -390,7 +392,11 @@ jobs:
           cat /tmp/ruoyi-frontend.log
           exit 1
 
-      # Phase-three browser acceptance always checks out the current frontend branch head.
+      - name: Validate frontend Capability Contract v1
+        working-directory: frontend
+        run: node tests/ai-capability-contract.test.mjs
+
+      # Browser acceptance always uses the paired frontend branch selected above.
       - name: Run browser closed-loop acceptance
         working-directory: frontend
         env:
@@ -469,7 +475,8 @@ jobs:
           name: ai-agent-fullstack-e2e
           path: |
             frontend/test-results/
-            /tmp/ai-agent-e2e.log\n            /tmp/acceptance-revisions.txt
+            /tmp/ai-agent-e2e.log
+            /tmp/acceptance-revisions.txt
             /tmp/ruoyi-backend.log
             /tmp/ruoyi-frontend.log
             /tmp/mock-openai.log

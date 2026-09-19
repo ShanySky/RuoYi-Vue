@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - chatgpt/ai-agent-assistant
-      - chatgpt/ai-agent-hardening-b1-b3
+      - chatgpt/ai-agent-hardening-phase35-p0
   workflow_dispatch:
 
 jobs:
@@ -43,12 +43,14 @@ jobs:
           java-version: '17'
           cache: maven
 
+      - name: Validate fresh-install and ordered migration paths
+        run: bash scripts/ci/ai-schema-acceptance.sh
+
       - name: Initialize database
         run: |
           mysql -h127.0.0.1 -uroot -ppassword ry-vue < sql/ry_20260417.sql
           mysql -h127.0.0.1 -uroot -ppassword ry-vue < sql/quartz.sql
-          mysql -h127.0.0.1 -uroot -ppassword ry-vue < sql/ai_20260918.sql
-          mysql -h127.0.0.1 -uroot -ppassword ry-vue < sql/ai_hardening_b1_b3_20260919.sql
+          mysql -h127.0.0.1 -uroot -ppassword ry-vue < sql/ai_fresh_install.sql
           mysql -h127.0.0.1 -uroot -ppassword -e "update sys_config set config_value='false' where config_key='sys.account.captchaEnabled'" ry-vue
           test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='ry-vue' AND table_name LIKE 'ai_%';")" -ge "11"
 
@@ -218,7 +220,7 @@ jobs:
           curl -fsS -H "$AUTH" -X POST "http://127.0.0.1:8080/ai/config/models/$MODEL_ID/test-tools" | tee /tmp/test-tools.json | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["code"]==200; assert d["data"]=="SUPPORTED"'
 
           cat > /tmp/turn1.json <<JSON
-          {"modelId":$MODEL_ID,"userMessage":"请查一下用户 ry","route":"/system/user","pageContext":{"pageName":"用户管理"},"frontendTools":[{"name":"page_system_user_search","description":"查询用户","inputSchema":{"type":"object","properties":{"userName":{"type":"string"}},"additionalProperties":false}}]}
+          {"modelId":$MODEL_ID,"userMessage":"请查一下用户 ry","capabilityProtocol":"ruoyi-semantic-page-v1","pageId":"system.user","route":"/system/user","pageInstanceId":"system.user:ci","pageVersion":1,"pageContext":{"pageName":"用户管理"},"frontendTools":[{"name":"page_system_user_search","description":"查询用户","inputSchema":{"type":"object","properties":{"userName":{"type":"string"}},"additionalProperties":false}}]}
           JSON
           TURN1=$(curl -fsS -H "$AUTH" -H 'Content-Type: application/json' --data-binary @/tmp/turn1.json http://127.0.0.1:8080/ai/chat/turn)
           printf '%s' "$TURN1" | tee /tmp/turn1-response.json
@@ -226,14 +228,14 @@ jobs:
           CALL_ID=$(printf '%s' "$TURN1" | python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["toolCall"]["callId"])')
 
           cat > /tmp/turn2.json <<JSON
-          {"conversationId":$CONV_ID,"toolResult":{"callId":"$CALL_ID","success":true,"result":{"total":1,"rows":[{"userId":2,"userName":"ry","nickName":"若依"}]}},"route":"/system/user","pageContext":{"pageName":"用户管理","total":1},"frontendTools":[{"name":"page_system_user_search","description":"查询用户","inputSchema":{"type":"object","properties":{"userName":{"type":"string"}},"additionalProperties":false}}]}
+          {"conversationId":$CONV_ID,"toolResult":{"callId":"$CALL_ID","success":true,"result":{"total":1,"rows":[{"userId":2,"userName":"ry","nickName":"若依"}]}},"capabilityProtocol":"ruoyi-semantic-page-v1","pageId":"system.user","route":"/system/user","pageInstanceId":"system.user:ci","pageVersion":1,"pageContext":{"pageName":"用户管理","total":1},"frontendTools":[{"name":"page_system_user_search","description":"查询用户","inputSchema":{"type":"object","properties":{"userName":{"type":"string"}},"additionalProperties":false}}]}
           JSON
           curl -fsS -H "$AUTH" -H 'Content-Type: application/json' --data-binary @/tmp/turn2.json http://127.0.0.1:8080/ai/chat/turn | tee /tmp/turn2-response.json | python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["type"]=="MESSAGE"; assert d["message"]=="TOOL_RESULT_ACCEPTED"'
 
           # Same conversation, second user turn. Mock intentionally emits the same provider tool_call.id.
           # The runtime must return a new internal callId and complete without a DB unique-key error.
           cat > /tmp/turn3.json <<JSON
-          {"conversationId":$CONV_ID,"modelId":$MODEL_ID,"userMessage":"再查一次用户 ry","route":"/system/user","pageContext":{"pageName":"用户管理"},"frontendTools":[{"name":"page_system_user_search","description":"查询用户","inputSchema":{"type":"object","properties":{"userName":{"type":"string"}},"additionalProperties":false}}]}
+          {"conversationId":$CONV_ID,"modelId":$MODEL_ID,"userMessage":"再查一次用户 ry","capabilityProtocol":"ruoyi-semantic-page-v1","pageId":"system.user","route":"/system/user","pageInstanceId":"system.user:ci","pageVersion":1,"pageContext":{"pageName":"用户管理"},"frontendTools":[{"name":"page_system_user_search","description":"查询用户","inputSchema":{"type":"object","properties":{"userName":{"type":"string"}},"additionalProperties":false}}]}
           JSON
           TURN3=$(curl -fsS -H "$AUTH" -H 'Content-Type: application/json' --data-binary @/tmp/turn3.json http://127.0.0.1:8080/ai/chat/turn)
           printf '%s' "$TURN3" | tee /tmp/turn3-response.json
@@ -241,7 +243,7 @@ jobs:
           test "$CALL_ID" != "$CALL_ID_2"
 
           cat > /tmp/turn4.json <<JSON
-          {"conversationId":$CONV_ID,"toolResult":{"callId":"$CALL_ID_2","success":true,"result":{"total":1,"rows":[{"userId":2,"userName":"ry","nickName":"若依"}]}},"route":"/system/user","pageContext":{"pageName":"用户管理","total":1},"frontendTools":[{"name":"page_system_user_search","description":"查询用户","inputSchema":{"type":"object","properties":{"userName":{"type":"string"}},"additionalProperties":false}}]}
+          {"conversationId":$CONV_ID,"toolResult":{"callId":"$CALL_ID_2","success":true,"result":{"total":1,"rows":[{"userId":2,"userName":"ry","nickName":"若依"}]}},"capabilityProtocol":"ruoyi-semantic-page-v1","pageId":"system.user","route":"/system/user","pageInstanceId":"system.user:ci","pageVersion":1,"pageContext":{"pageName":"用户管理","total":1},"frontendTools":[{"name":"page_system_user_search","description":"查询用户","inputSchema":{"type":"object","properties":{"userName":{"type":"string"}},"additionalProperties":false}}]}
           JSON
           curl -fsS -H "$AUTH" -H 'Content-Type: application/json' --data-binary @/tmp/turn4.json http://127.0.0.1:8080/ai/chat/turn | tee /tmp/turn4-response.json | python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["type"]=="MESSAGE"; assert d["message"]=="TOOL_RESULT_ACCEPTED"'
 
@@ -263,7 +265,7 @@ jobs:
           python3 - "$LONG_CONV_ID" "$MODEL_ID" <<'PY' >/tmp/long-turn1.json
           import json,sys
           cid=int(sys.argv[1]); mid=int(sys.argv[2])
-          print(json.dumps({"conversationId":cid,"modelId":mid,"userMessage":"LONG_CONTEXT_A:"+("A"*11800),"route":"/system/user","pageContext":{"pageName":"用户管理"}}, ensure_ascii=False))
+          print(json.dumps({"conversationId":cid,"modelId":mid,"userMessage":"LONG_CONTEXT_A:"+("A"*11800),"capabilityProtocol":"ruoyi-semantic-page-v1","pageId":"system.user","route":"/system/user","pageInstanceId":"system.user:ci","pageVersion":1,"pageContext":{"pageName":"用户管理"}}, ensure_ascii=False))
           PY
           LONG1=$(curl -fsS -H "$AUTH" -H 'Content-Type: application/json' --data-binary @/tmp/long-turn1.json http://127.0.0.1:8080/ai/chat/turn)
           printf '%s' "$LONG1" | python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["type"]=="MESSAGE"; assert d["message"]=="AI_OK"'
@@ -271,7 +273,7 @@ jobs:
           python3 - "$LONG_CONV_ID" "$MODEL_ID" <<'PY' >/tmp/long-turn2.json
           import json,sys
           cid=int(sys.argv[1]); mid=int(sys.argv[2])
-          print(json.dumps({"conversationId":cid,"modelId":mid,"userMessage":"LONG_CONTEXT_B:"+("B"*11800),"route":"/system/user","pageContext":{"pageName":"用户管理"}}, ensure_ascii=False))
+          print(json.dumps({"conversationId":cid,"modelId":mid,"userMessage":"LONG_CONTEXT_B:"+("B"*11800),"capabilityProtocol":"ruoyi-semantic-page-v1","pageId":"system.user","route":"/system/user","pageInstanceId":"system.user:ci","pageVersion":1,"pageContext":{"pageName":"用户管理"}}, ensure_ascii=False))
           PY
           LONG2=$(curl -fsS -H "$AUTH" -H 'Content-Type: application/json' --data-binary @/tmp/long-turn2.json http://127.0.0.1:8080/ai/chat/turn)
           printf '%s' "$LONG2" | tee /tmp/long-turn2-response.json | python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["type"]=="MESSAGE"; assert d["message"]=="CHECKPOINT_CONTINUED_OK"'
@@ -303,7 +305,7 @@ jobs:
           python3 - "$WRITE_CONV_ID" "$MODEL_ID" <<'PY' >/tmp/no-repeat-a.json
           import json,sys
           cid=int(sys.argv[1]); mid=int(sys.argv[2])
-          print(json.dumps({"conversationId":cid,"modelId":mid,"userMessage":"NO_REPEAT_PADDING_A:"+("W"*11800),"route":"/system/user","pageContext":{"pageName":"用户管理"}}, ensure_ascii=False))
+          print(json.dumps({"conversationId":cid,"modelId":mid,"userMessage":"NO_REPEAT_PADDING_A:"+("W"*11800),"capabilityProtocol":"ruoyi-semantic-page-v1","pageId":"system.user","route":"/system/user","pageInstanceId":"system.user:ci","pageVersion":1,"pageContext":{"pageName":"用户管理"}}, ensure_ascii=False))
           PY
           curl -fsS -H "$AUTH" -H 'Content-Type: application/json' --data-binary @/tmp/no-repeat-a.json http://127.0.0.1:8080/ai/chat/turn \
             | tee /tmp/no-repeat-padding-response.json \
@@ -312,7 +314,7 @@ jobs:
           python3 - "$WRITE_CONV_ID" "$MODEL_ID" <<'PY' >/tmp/no-repeat-b.json
           import json,sys
           cid=int(sys.argv[1]); mid=int(sys.argv[2])
-          print(json.dumps({"conversationId":cid,"modelId":mid,"userMessage":"NO_REPEAT_AFTER_COMPACTION:"+("Z"*11800),"route":"/system/user","pageContext":{"pageName":"用户管理"},"frontendTools":[{"name":"page_system_user_edit_submit","description":"提交用户编辑","inputSchema":{"type":"object","properties":{},"additionalProperties":False}}]}, ensure_ascii=False))
+          print(json.dumps({"conversationId":cid,"modelId":mid,"userMessage":"NO_REPEAT_AFTER_COMPACTION:"+("Z"*11800),"capabilityProtocol":"ruoyi-semantic-page-v1","pageId":"system.user","route":"/system/user","pageInstanceId":"system.user:ci","pageVersion":1,"pageContext":{"pageName":"用户管理"},"frontendTools":[{"name":"page_system_user_edit_submit","description":"提交用户编辑","inputSchema":{"type":"object","properties":{},"additionalProperties":False}}]}, ensure_ascii=False))
           PY
           curl -fsS -H "$AUTH" -H 'Content-Type: application/json' --data-binary @/tmp/no-repeat-b.json http://127.0.0.1:8080/ai/chat/turn \
             | tee /tmp/no-repeat-response.json \
@@ -326,6 +328,9 @@ jobs:
 
       - name: Run B1-B3 hardening acceptance
         run: bash scripts/ci/ai-hardening-b1-b3-acceptance.sh
+
+      - name: Run Phase 3.5 P0 invariant acceptance
+        run: bash scripts/ci/ai-phase35-p0-invariants.sh
 
       - name: Upload diagnostic logs
         if: always()
