@@ -6,10 +6,12 @@ on:
   push:
     branches:
       - chatgpt/ai-agent-assistant
+      - chatgpt/ai-agent-hardening-b1-b3
     paths:
       - '.github/workflows/ai-agent-fullstack-e2e.yml'
       - 'ruoyi-ai/**'
       - 'sql/ai_20260918.sql'
+      - 'sql/ai_hardening_b1_b3_20260919.sql'
   workflow_dispatch:
 
 jobs:
@@ -83,6 +85,7 @@ jobs:
           mysql -h127.0.0.1 -uroot -ppassword ry-vue < backend/sql/ry_20260417.sql
           mysql -h127.0.0.1 -uroot -ppassword ry-vue < backend/sql/quartz.sql
           mysql -h127.0.0.1 -uroot -ppassword ry-vue < backend/sql/ai_20260918.sql
+          mysql -h127.0.0.1 -uroot -ppassword ry-vue < backend/sql/ai_hardening_b1_b3_20260919.sql
           mysql -h127.0.0.1 -uroot -ppassword -e "update sys_config set config_value='false' where config_key='sys.account.captchaEnabled'; insert ignore into sys_role_menu(role_id,menu_id) values(2,118),(2,1061); insert into ai_conversation(user_id,model_id,reasoning_effort,title,route,status,create_time,update_time) values(1,null,null,'H_EXPIRED_CLEANUP','/index','ACTIVE',date_sub(sysdate(),interval 120 day),date_sub(sysdate(),interval 120 day));" ry-vue
 
       - name: Build backend

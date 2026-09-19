@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - chatgpt/ai-agent-assistant
+      - chatgpt/ai-agent-hardening-b1-b3
   workflow_dispatch:
 
 jobs:
@@ -47,8 +48,12 @@ jobs:
           mysql -h127.0.0.1 -uroot -ppassword ry-vue < sql/ry_20260417.sql
           mysql -h127.0.0.1 -uroot -ppassword ry-vue < sql/quartz.sql
           mysql -h127.0.0.1 -uroot -ppassword ry-vue < sql/ai_20260918.sql
+          mysql -h127.0.0.1 -uroot -ppassword ry-vue < sql/ai_hardening_b1_b3_20260919.sql
           mysql -h127.0.0.1 -uroot -ppassword -e "update sys_config set config_value='false' where config_key='sys.account.captchaEnabled'" ry-vue
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='ry-vue' AND table_name LIKE 'ai_%';")" -ge "10"
+          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='ry-vue' AND table_name LIKE 'ai_%';")" -ge "11"
+
+      - name: Run focused AI hardening tests
+        run: mvn -B -pl ruoyi-ai -am test
 
       - name: Build backend
         shell: bash
@@ -319,6 +324,9 @@ jobs:
 
           curl -fsS -H "$AUTH" -H 'Content-Type: application/json' -X PUT             -d '{"contextWindowTokens":65536,"autoCompaction":true,"compactionThresholdPercent":75}'             "http://127.0.0.1:8080/ai/config/models/$MODEL_ID/runtime-settings" >/tmp/runtime-reset.json
 
+      - name: Run B1-B3 hardening acceptance
+        run: bash scripts/ci/ai-hardening-b1-b3-acceptance.sh
+
       - name: Upload diagnostic logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -335,6 +343,8 @@ jobs:
             /tmp/turn3-response.json
             /tmp/turn4-response.json
             /tmp/cache-fallback-response.json
+            /tmp/b3-disable.json
+            /tmp/b3-audit.json
             /tmp/no-repeat-write-start.json
             /tmp/no-repeat-write-result.json
             /tmp/no-repeat-padding-response.json
