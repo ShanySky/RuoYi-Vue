@@ -94,3 +94,52 @@
 - 哪个提交记录最终状态。
 
 不要让长期主线变成调试过程日志。
+## 8. 分支生命周期与清理
+
+专项实施、架构讨论或临时治理分支在完成使命后，应及时清理；除明确标记为 `archive/*` 或其他长期保留用途的分支外，不长期保留已经完成的工作分支。
+
+优先顺序：
+
+1. 正常实施尽量通过 Pull Request 合入 AI 主线，并在仓库开启“Automatically delete head branches”，由 GitHub 在 PR 合并后自动删除 head branch。
+2. 如果 GitHub Connector 当前没有 `delete_branch` / `delete_ref` 能力，又存在需要主动清理的遗留分支，可以使用**临时 GitHub Actions 清理分支**作为 fallback，不要求用户手工删除。
+
+使用临时 GitHub Actions 清理时必须遵守：
+
+1. 先确认目标工作分支的有效成果已经完整合入目标主线；未合入、仍需保留或用途不明确的分支禁止删除。
+2. 从当前主线 HEAD 创建临时清理分支，例如 `chatgpt/cleanup-<task>`。
+3. 临时 workflow 只存在于该清理分支，不写入主线；权限只申请：
+
+   ```yaml
+   permissions:
+     contents: write
+   ```
+
+4. Runner 使用自带 `gh` CLI 和当前仓库 `GITHUB_TOKEN` 删除目标 ref：
+
+   ```yaml
+   env:
+     GH_TOKEN: ${{ github.token }}
+     REPOSITORY: ${{ github.repository }}
+   ```
+
+   ```bash
+   gh api --method DELETE \\
+     "repos/$REPOSITORY/git/refs/heads/<目标分支>"
+   ```
+
+5. 目标分支删除成功后，同一个 workflow 再删除自己的临时清理分支：
+
+   ```bash
+   gh api --method DELETE \\
+     "repos/$REPOSITORY/git/refs/heads/<临时清理分支>"
+   ```
+
+6. workflow 可监听临时清理分支自身的 push，使创建该 workflow 的提交直接触发执行；不要为了清理分支在主线长期保留专用 workflow。
+7. 执行完成后必须重新查询并确认：
+   - 目标工作分支已不存在；
+   - 临时清理分支已不存在；
+   - 主线 HEAD 没有因为清理动作发生变化。
+8. 如果仓库或组织策略使 `GITHUB_TOKEN` 实际没有 `contents: write`，应明确报告清理失败，不得假装成功，也不要擅自扩大到更高权限凭据。
+
+该 fallback 只用于分支生命周期治理，不用于绕过分支保护、审批或其他仓库安全策略。
+
