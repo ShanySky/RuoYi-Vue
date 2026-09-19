@@ -15,10 +15,10 @@ class GenericCrudToolPolicyProviderTest
         assertEquals("READ", search.riskLevel());
         assertEquals("system:post:list", search.requiredPermission());
 
-        ToolPolicyDefinition roleUsers = provider.resolve("page_system_role_auth_user_cancel_users");
+        ToolPolicyDefinition roleUsers = provider.resolve("page_system_role_auth_user_view");
         assertNotNull(roleUsers);
-        assertEquals("DANGEROUS_WRITE", roleUsers.riskLevel());
-        assertEquals("system:role:remove", roleUsers.requiredPermission());
+        assertEquals("READ", roleUsers.riskLevel());
+        assertEquals("system:role:list", roleUsers.requiredPermission());
 
         ToolPolicyDefinition resetPassword = provider.resolve("page_system_user_reset_password");
         assertEquals("DANGEROUS_WRITE", resetPassword.riskLevel());
