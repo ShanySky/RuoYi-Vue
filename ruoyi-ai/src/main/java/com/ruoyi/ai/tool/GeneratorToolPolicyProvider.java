@@ -1,6 +1,7 @@
 package com.ruoyi.ai.tool;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Component;
 import static com.ruoyi.ai.tool.ToolPolicyDefinition.objectSchema;

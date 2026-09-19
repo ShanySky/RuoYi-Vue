@@ -60,19 +60,17 @@ class AiCapabilityProtocolValidatorTest
     @Test
     void continuationMustMatchPendingSemanticPageSnapshot()
     {
-        AiChatTurnRequest request = validRequest();
-        AiPendingToolCall pending = pendingFrom(request);
-        assertDoesNotThrow(() -> validator.validateContinuation(request, pending, true));
+        AiChatTurnRequest valid = validRequest();
+        AiPendingToolCall pending = pendingFrom(valid);
+        assertDoesNotThrow(() -> validator.validateContinuation(valid, pending, true));
 
-        request.setPageId("system.role");
-        assertThrows(ServiceException.class, () -> validator.validateContinuation(request, pending, true));
+        AiChatTurnRequest wrongPage = validRequest();
+        wrongPage.setPageId("system.role");
+        assertThrows(ServiceException.class, () -> validator.validateContinuation(wrongPage, pending, true));
 
-        request = validRequest();
-        pending = pendingFrom(request);
-        request.setPageInstanceId("system.user:two");
-        AiChatTurnRequest staleInstance = request;
-        AiPendingToolCall saved = pending;
-        assertThrows(ServiceException.class, () -> validator.validateContinuation(staleInstance, saved, true));
+        AiChatTurnRequest staleInstance = validRequest();
+        staleInstance.setPageInstanceId("system.user:two");
+        assertThrows(ServiceException.class, () -> validator.validateContinuation(staleInstance, pending, true));
     }
 
     @Test
