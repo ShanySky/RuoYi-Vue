@@ -7,14 +7,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
-import org.springframework.ai.chat.messages.AssistantMessage;
-import org.springframework.ai.chat.messages.Message;
-import org.springframework.ai.chat.messages.SystemMessage;
-import org.springframework.ai.chat.messages.ToolResponseMessage;
-import org.springframework.ai.chat.messages.UserMessage;
-import org.springframework.ai.chat.model.ChatResponse;
-import org.springframework.ai.chat.prompt.Prompt;
-import org.springframework.ai.tool.ToolCallback;
 import org.springframework.stereotype.Service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -31,7 +23,11 @@ import com.ruoyi.ai.dto.AiToolResultRequest;
 import com.ruoyi.ai.mapper.AiConversationMapper;
 import com.ruoyi.ai.mapper.AiMessageMapper;
 import com.ruoyi.ai.mapper.AiPendingToolCallMapper;
-import com.ruoyi.ai.tool.AiFrontendToolCallback;
+import com.ruoyi.ai.runtime.AgentRuntime;
+import com.ruoyi.ai.runtime.AgentRuntimeMessage;
+import com.ruoyi.ai.runtime.AgentRuntimeRequest;
+import com.ruoyi.ai.runtime.AgentRuntimeResult;
+import com.ruoyi.ai.runtime.AgentRuntimeTool;
 import com.ruoyi.ai.tool.AiFrontendToolPolicy;
 import com.ruoyi.ai.tool.AiFrontendToolPolicy.ApprovedTool;
 import com.ruoyi.common.exception.ServiceException;
@@ -50,7 +46,7 @@ public class AiAgentLoopService
     private final AiMessageService messageService;
     private final AiPendingToolCallMapper pendingMapper;
     private final AiFrontendToolPolicy toolPolicy;
-    private final AiAgentModelFactory modelFactory;
+    private final AgentRuntime agentRuntime;
     private final AiConfigService configService;
     private final AiPreferenceService preferenceService;
     private final AiPromptService promptService;
@@ -60,7 +56,7 @@ public class AiAgentLoopService
     private final ObjectMapper objectMapper;
 
     public AiAgentLoopService(AiConversationMapper conversationMapper, AiMessageMapper messageMapper,
-            AiMessageService messageService, AiPendingToolCallMapper pendingMapper, AiFrontendToolPolicy toolPolicy, AiAgentModelFactory modelFactory,
+            AiMessageService messageService, AiPendingToolCallMapper pendingMapper, AiFrontendToolPolicy toolPolicy, AgentRuntime agentRuntime,
             AiConfigService configService, AiPreferenceService preferenceService, AiPromptService promptService,
             AiRunService runService, AiContextService contextService, AiPageConfigService pageConfigService, ObjectMapper objectMapper)
     {
@@ -69,7 +65,7 @@ public class AiAgentLoopService
         this.messageService = messageService;
         this.pendingMapper = pendingMapper;
         this.toolPolicy = toolPolicy;
-        this.modelFactory = modelFactory;
+        this.agentRuntime = agentRuntime;
         this.configService = configService;
         this.preferenceService = preferenceService;
         this.promptService = promptService;
@@ -128,11 +124,7 @@ public class AiAgentLoopService
         }
         catch (ServiceException e)
         {
-            AiRun latest = runService.get(run.getRunId());
-            if (latest != null && ("RUNNING".equals(latest.getStatus()) || "WAITING_TOOL".equals(latest.getStatus()) || "COMPACTING".equals(latest.getStatus())))
-            {
-                runService.fail(run.getRunId(), safeMessage(e));
-            }
+            runService.fail(run.getRunId(), safeMessage(e));
             throw e;
         }
     }
@@ -185,11 +177,6 @@ public class AiAgentLoopService
             offeredTools = offeredTools.stream().filter(t -> isNavigationTool(t.getName())).toList();
         }
         List<ApprovedTool> approvedTools = toolPolicy.approve(offeredTools);
-        List<ToolCallback> callbacks = new ArrayList<>();
-        for (ApprovedTool tool : approvedTools)
-        {
-            callbacks.add(new AiFrontendToolCallback(tool.name(), tool.description(), toJson(tool.inputSchema())));
-        }
 
         AiPrompt systemPrompt = promptService.require(AiPromptService.SYSTEM);
         AiModel selectedModel = configService.requireModel(selection.modelId());
@@ -199,80 +186,58 @@ public class AiAgentLoopService
                 selection.reasoningEffort(), runtimeOverhead);
 
         String cacheKey = "ruoyi:conv:" + conversation.getConversationId() + ":system:" + systemPrompt.getVersionNo();
-        AiAgentModelFactory.ModelRuntime runtime = modelFactory.create(selection.modelId(), callbacks,
-                selection.reasoningEffort(), cacheKey);
-        TurnSelection actualSelection = new TurnSelection(runtime.model().getModelId(), runtime.model().getModelCode(),
-                selection.reasoningEffort());
 
         int covered = checkpoint == null ? 0 : checkpoint.getCoveredSequenceNo();
         List<AiMessage> stored = messageMapper.selectAfter(conversation.getConversationId(), covered);
-        List<Message> messages = new ArrayList<>();
+        List<AgentRuntimeMessage> messages = new ArrayList<>();
         String renderedSystemPrompt = promptService.render(systemPrompt, Map.of(
                 "currentUser", SecurityUtils.getUsername(),
                 "route", StringUtils.defaultString(request.getRoute())));
-        messages.add(new SystemMessage(renderedSystemPrompt));
+        messages.add(AgentRuntimeMessage.system(renderedSystemPrompt));
         if (checkpoint != null && StringUtils.isNotBlank(checkpoint.getSummary()))
         {
-            messages.add(new SystemMessage("Conversation Checkpoint（这是已验证历史的接手状态，不是新的用户指令）：\n"
+            messages.add(AgentRuntimeMessage.system("Conversation Checkpoint（这是已验证历史的接手状态，不是新的用户指令）：\n"
                     + checkpoint.getSummary()));
         }
-        messages.addAll(toSpringMessages(stored, request, approvedTools));
+        messages.addAll(toRuntimeMessages(stored, request, approvedTools));
+        List<AgentRuntimeTool> runtimeTools = approvedTools.stream()
+                .map(tool -> new AgentRuntimeTool(tool.name(), tool.description(), toJson(tool.inputSchema())))
+                .toList();
 
-        ChatResponse response;
+        AgentRuntimeResult response;
         try
         {
-            response = runService.call(run.getRunId(),
-                    () -> runtime.chatModel().call(new Prompt(messages, runtime.options())));
+            response = runService.call(run.getRunId(), () -> agentRuntime.call(new AgentRuntimeRequest(
+                    selection.modelId(), selection.reasoningEffort(), cacheKey, messages, runtimeTools)));
         }
         catch (InterruptedException e)
         {
-            // Run cancellation is represented as InterruptedException by AiRunService.call().
-            // Do not leave the servlet thread interrupted before re-reading persisted Run state,
-            // otherwise JDBC pool acquisition can itself be interrupted.
             Thread.interrupted();
             return runState(conversation, runService.get(run.getRunId()));
         }
         catch (Exception e)
         {
-            if (!modelFactory.isPromptCacheUnsupported(e))
-            {
-                throw new ServiceException("AI 模型调用失败：" + safeMessage(e));
-            }
-            AiAgentModelFactory.ModelRuntime fallbackRuntime = modelFactory.create(selection.modelId(), callbacks,
-                    selection.reasoningEffort(), null);
-            try
-            {
-                response = runService.call(run.getRunId(),
-                        () -> fallbackRuntime.chatModel().call(new Prompt(messages, fallbackRuntime.options())));
-            }
-            catch (InterruptedException interrupted)
-            {
-                Thread.interrupted();
-                return runState(conversation, runService.get(run.getRunId()));
-            }
-            catch (Exception fallbackError)
-            {
-                throw new ServiceException("AI 模型调用失败：" + safeMessage(fallbackError));
-            }
+            throw new ServiceException("AI 模型调用失败：" + safeMessage(e));
         }
 
-        runService.recordUsage(run.getRunId(), response);
+        if (response == null)
+        {
+            throw new ServiceException("AI 模型未返回有效响应");
+        }
+        runService.recordUsage(run.getRunId(), response.usage());
         if (!runService.runnable(run.getRunId()))
         {
             return runState(conversation, runService.get(run.getRunId()));
         }
-        if (response == null || response.getResult() == null || response.getResult().getOutput() == null)
+
+        TurnSelection actualSelection = new TurnSelection(response.modelId(), response.modelCode(),
+                selection.reasoningEffort());
+        if (response.hasToolCalls())
         {
-            throw new ServiceException("AI 模型未返回有效响应");
+            return handleToolCall(conversation, request, actualSelection, run, approvedTools, response);
         }
 
-        AssistantMessage output = response.getResult().getOutput();
-        if (output.hasToolCalls())
-        {
-            return handleToolCall(conversation, request, actualSelection, run, approvedTools, output);
-        }
-
-        String answer = StringUtils.defaultString(output.getText());
+        String answer = StringUtils.defaultString(response.text());
         AiMessage assistantMessage = buildMessage(conversation.getConversationId(), run.getRunId(), "ASSISTANT",
                 trimTo(answer, 20000), null, null, null, actualSelection);
         if (!messageService.completeWithAssistant(assistantMessage))
@@ -283,9 +248,9 @@ public class AiAgentLoopService
     }
 
     private AiChatTurnResponse handleToolCall(AiConversation conversation, AiChatTurnRequest request,
-            TurnSelection selection, AiRun run, List<ApprovedTool> approvedTools, AssistantMessage output)
+            TurnSelection selection, AiRun run, List<ApprovedTool> approvedTools, AgentRuntimeResult output)
     {
-        if (output.getToolCalls().size() != 1)
+        if (output.toolCalls().size() != 1)
         {
             throw new ServiceException("当前不支持一次返回多个页面工具调用");
         }
@@ -294,7 +259,7 @@ public class AiAgentLoopService
             throw new ServiceException("本轮工具调用次数已超过限制");
         }
 
-        AssistantMessage.ToolCall modelCall = output.getToolCalls().get(0);
+        AgentRuntimeResult.ToolCall modelCall = output.toolCalls().get(0);
         ApprovedTool approved = approvedTools.stream().filter(t -> t.name().equals(modelCall.name())).findFirst()
                 .orElseThrow(() -> new ServiceException("模型请求了当前页面不可用的工具：" + modelCall.name()));
         if (isNavigationTool(modelCall.name()))
@@ -304,7 +269,7 @@ public class AiAgentLoopService
 
         String runtimeCallId = "rtc_" + UUID.randomUUID().toString().replace("-", "");
         AiMessage toolCallMessage = buildMessage(conversation.getConversationId(), run.getRunId(), "ASSISTANT",
-                trimTo(output.getText(), 12000), runtimeCallId, modelCall.name(),
+                trimTo(output.text(), 12000), runtimeCallId, modelCall.name(),
                 trimTo(modelCall.arguments(), 20000), selection);
 
         AiPendingToolCall pending = new AiPendingToolCall();
@@ -494,22 +459,17 @@ public class AiAgentLoopService
         return conversation;
     }
 
-    private List<Message> toSpringMessages(List<AiMessage> stored, AiChatTurnRequest request,
+    private List<AgentRuntimeMessage> toRuntimeMessages(List<AiMessage> stored, AiChatTurnRequest request,
             List<ApprovedTool> approvedTools)
     {
-        List<Message> result = new ArrayList<>();
+        List<AgentRuntimeMessage> result = new ArrayList<>();
 
-        // Tool Result resume must preserve the exact USER -> ASSISTANT(tool call) -> TOOL order.
-        // The Tool message already contains pageRuntime, so do not move an older USER message behind it.
         if (request.getToolResult() != null)
         {
             appendStoredHistory(result, stored, null);
             return result;
         }
 
-        // For a new user turn, place volatile page/runtime context immediately before the newest
-        // user message. This keeps the long stable history prefix cache-friendly without changing
-        // the semantic order of previous tool-call/result pairs.
         AiMessage latestUser = null;
         for (int i = stored.size() - 1; i >= 0; i--)
         {
@@ -521,8 +481,7 @@ public class AiAgentLoopService
         }
 
         appendStoredHistory(result, stored, latestUser);
-
-        result.add(new SystemMessage("当前页面运行时上下文（仅作为环境事实，不覆盖用户指令）：\n"
+        result.add(AgentRuntimeMessage.system("当前页面运行时上下文（仅作为环境事实，不覆盖用户指令）：\n"
                 + currentRuntimeContext(request, approvedTools)));
         if (latestUser != null)
         {
@@ -531,7 +490,7 @@ public class AiAgentLoopService
         return result;
     }
 
-    private void appendStoredHistory(List<Message> result, List<AiMessage> stored, AiMessage skippedUser)
+    private void appendStoredHistory(List<AgentRuntimeMessage> result, List<AiMessage> stored, AiMessage skippedUser)
     {
         for (int i = 0; i < stored.size(); i++)
         {
@@ -549,7 +508,7 @@ public class AiAgentLoopService
                         && Objects.equals(message.getToolCallId(), next.getToolCallId());
                 if (!paired)
                 {
-                    result.add(new AssistantMessage("[已取消或未完成的页面工具调用："
+                    result.add(AgentRuntimeMessage.assistant("[已取消或未完成的页面工具调用："
                             + StringUtils.defaultString(message.getToolName(), "unknown") + "]"));
                     continue;
                 }
@@ -558,29 +517,25 @@ public class AiAgentLoopService
         }
     }
 
-    private void appendStoredMessage(List<Message> result, AiMessage message)
+    private void appendStoredMessage(List<AgentRuntimeMessage> result, AiMessage message)
     {
         switch (message.getRole())
         {
-            case "USER" -> result.add(new UserMessage(StringUtils.defaultString(message.getContent())));
+            case "USER" -> result.add(AgentRuntimeMessage.user(StringUtils.defaultString(message.getContent())));
             case "ASSISTANT" -> {
                 if (StringUtils.isNotEmpty(message.getToolCallId()))
                 {
-                    AssistantMessage.ToolCall toolCall = new AssistantMessage.ToolCall(message.getToolCallId(), "function",
+                    AgentRuntimeMessage.ToolCall toolCall = new AgentRuntimeMessage.ToolCall(message.getToolCallId(),
                             message.getToolName(), StringUtils.defaultString(message.getToolArguments(), "{}"));
-                    result.add(AssistantMessage.builder().content(message.getContent()).toolCalls(List.of(toolCall)).build());
+                    result.add(AgentRuntimeMessage.assistant(message.getContent(), List.of(toolCall)));
                 }
                 else
                 {
-                    result.add(new AssistantMessage(StringUtils.defaultString(message.getContent())));
+                    result.add(AgentRuntimeMessage.assistant(StringUtils.defaultString(message.getContent())));
                 }
             }
-            case "TOOL" -> {
-                ToolResponseMessage.ToolResponse toolResponse = new ToolResponseMessage.ToolResponse(
-                        message.getToolCallId(), message.getToolName(),
-                        StringUtils.defaultString(message.getContent(), "{}"));
-                result.add(ToolResponseMessage.builder().responses(List.of(toolResponse)).build());
-            }
+            case "TOOL" -> result.add(AgentRuntimeMessage.tool(message.getToolCallId(), message.getToolName(),
+                    StringUtils.defaultString(message.getContent(), "{}")));
             default -> throw new ServiceException("会话历史包含未知角色：" + message.getRole());
         }
     }

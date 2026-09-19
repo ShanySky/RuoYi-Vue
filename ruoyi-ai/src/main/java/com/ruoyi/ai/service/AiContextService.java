@@ -1,9 +1,9 @@
 package com.ruoyi.ai.service;
-import java.util.*; import org.springframework.ai.chat.messages.*; import org.springframework.ai.chat.model.ChatResponse; import org.springframework.ai.chat.prompt.Prompt; import org.springframework.stereotype.Service; import com.ruoyi.ai.domain.*; import com.ruoyi.ai.mapper.*; import com.ruoyi.common.exception.ServiceException; import com.ruoyi.common.utils.StringUtils;
+import java.util.*; import org.springframework.stereotype.Service; import com.ruoyi.ai.domain.*; import com.ruoyi.ai.mapper.*; import com.ruoyi.ai.runtime.*; import com.ruoyi.common.exception.ServiceException; import com.ruoyi.common.utils.StringUtils;
 @Service
 public class AiContextService {
- private final AiMessageMapper messages; private final AiCheckpointMapper checkpoints; private final AiPromptService prompts; private final AiAgentModelFactory models; private final AiRunService runs;
- public AiContextService(AiMessageMapper m,AiCheckpointMapper c,AiPromptService p,AiAgentModelFactory mf,AiRunService r){messages=m;checkpoints=c;prompts=p;models=mf;runs=r;}
+ private final AiMessageMapper messages; private final AiCheckpointMapper checkpoints; private final AiPromptService prompts; private final AgentRuntime runtime; private final AiRunService runs;
+ public AiContextService(AiMessageMapper m,AiCheckpointMapper c,AiPromptService p,AgentRuntime runtime,AiRunService r){messages=m;checkpoints=c;prompts=p;this.runtime=runtime;runs=r;}
  public AiCheckpoint maybeCompact(AiConversation conversation,AiRun run,AiModel model,String reasoningEffort,String runtimeOverhead) {
   AiCheckpoint latest=checkpoints.selectLatest(conversation.getConversationId());
   if(!"0".equals(model.getAutoCompaction()))return latest;
@@ -18,23 +18,13 @@ public class AiContextService {
   if(latest!=null&&StringUtils.isNotBlank(latest.getSummary()))payload.append("已有 Checkpoint：\n").append(latest.getSummary()).append("\n\n");
   payload.append("需要压缩的后续历史：\n");appendCompactionHistory(payload,segment);
   try{
-   var runtime=models.create(model.getModelId(),List.of(),reasoningEffort,"ruoyi:compaction:"+conversation.getConversationId());
-   Prompt compactionPrompt=new Prompt(List.of(new SystemMessage(prompts.render(cpPrompt,Map.of("conversationId",conversation.getConversationId(),"modelCode",StringUtils.defaultString(model.getModelCode())))),new UserMessage(payload.toString())),runtime.options());
-   ChatResponse response;
-   try{
-    response=runs.call(run.getRunId(),()->runtime.chatModel().call(compactionPrompt));
-   }catch(InterruptedException interrupted){
-    throw interrupted;
-   }catch(Exception cacheError){
-    if(!models.isPromptCacheUnsupported(cacheError))throw cacheError;
-    var fallback=models.create(model.getModelId(),List.of(),reasoningEffort,null);
-    Prompt fallbackPrompt=new Prompt(compactionPrompt.getInstructions(),fallback.options());
-    response=runs.call(run.getRunId(),()->fallback.chatModel().call(fallbackPrompt));
-   }
-   runs.recordUsage(run.getRunId(),response);
-   if(response==null||response.getResult()==null||response.getResult().getOutput()==null||StringUtils.isBlank(response.getResult().getOutput().getText()))throw new ServiceException("上下文压缩未返回有效 Checkpoint");
+   AgentRuntimeRequest request=new AgentRuntimeRequest(model.getModelId(),reasoningEffort,"ruoyi:compaction:"+conversation.getConversationId(),
+    List.of(AgentRuntimeMessage.system(prompts.render(cpPrompt,Map.of("conversationId",conversation.getConversationId(),"modelCode",StringUtils.defaultString(model.getModelCode())))),AgentRuntimeMessage.user(payload.toString())),List.of());
+   AgentRuntimeResult response=runs.call(run.getRunId(),()->runtime.call(request));
+   runs.recordUsage(run.getRunId(),response.usage());
+   if(response==null||StringUtils.isBlank(response.text()))throw new ServiceException("上下文压缩未返回有效 Checkpoint");
    if(!runs.endCompaction(run.getRunId()))return latest;
-   AiCheckpoint cp=new AiCheckpoint();cp.setConversationId(conversation.getConversationId());cp.setRunId(run.getRunId());cp.setCoveredSequenceNo(cutoff);cp.setSummary(response.getResult().getOutput().getText().trim());cp.setModelId(model.getModelId());cp.setModelCode(model.getModelCode());cp.setEstimatedTokens(estimate);cp.setStatus("ACTIVE");checkpoints.insert(cp);return cp;
+   AiCheckpoint cp=new AiCheckpoint();cp.setConversationId(conversation.getConversationId());cp.setRunId(run.getRunId());cp.setCoveredSequenceNo(cutoff);cp.setSummary(response.text().trim());cp.setModelId(model.getModelId());cp.setModelCode(model.getModelCode());cp.setEstimatedTokens(estimate);cp.setStatus("ACTIVE");checkpoints.insert(cp);return cp;
   }catch(InterruptedException e){Thread.interrupted();return latest;}catch(ServiceException e){runs.endCompaction(run.getRunId());throw e;}catch(Exception e){runs.endCompaction(run.getRunId());throw new ServiceException("上下文压缩失败："+safe(e));}
  }
  private void appendCompactionHistory(StringBuilder payload,List<AiMessage> segment){
