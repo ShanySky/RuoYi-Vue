@@ -2,6 +2,7 @@ package com.ruoyi.ai.service;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.interceptor.TransactionAspectSupport;
 import com.ruoyi.ai.domain.AiMessage;
 import com.ruoyi.ai.domain.AiPendingToolCall;
 import com.ruoyi.ai.mapper.AiConversationMapper;
@@ -63,8 +64,13 @@ public class AiMessageService
     public boolean resolveToolResult(AiMessage message, Long pendingId)
     {
         requireConversation(message);
-        if (pendingMapper.resolve(pendingId) != 1 || !lifecycle.tryResumeTool(message.getRunId()))
+        if (!lifecycle.tryResumeTool(message.getRunId()))
         {
+            return false;
+        }
+        if (pendingMapper.resolve(pendingId) != 1)
+        {
+            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
             return false;
         }
         appendLocked(message);
