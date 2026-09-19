@@ -20,7 +20,7 @@ mysql_ci() {
 grep -q "implements AgentRuntime" ruoyi-ai/src/main/java/com/ruoyi/ai/runtime/SpringAiAgentRuntime.java
 
 # B2: business services do not call Run state SQL primitives directly.
-test "$(grep -R "runs\.transition\|runs\.supersedeFrom" -n ruoyi-ai/src/main/java/com/ruoyi/ai/service   | grep -v RunLifecycleService.java | wc -l)" = "0"
+! grep -R "runs\.transition\|runs\.supersedeFrom" -n ruoyi-ai/src/main/java/com/ruoyi/ai/service | grep -v RunLifecycleService.java
 
 LOGIN=$(curl -fsS -H 'Content-Type: application/json'   -d "{\"username\":\"$LOGIN_USER\",\"password\":\"$LOGIN_PASSWORD\"}" "$BASE_URL/login")
 TOKEN=$(printf '%s' "$LOGIN" | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')
