@@ -235,3 +235,30 @@ on duplicate key update page_name=values(page_name);
 insert into sys_config(config_name,config_key,config_value,config_type,create_by,create_time,remark) select 'AI 会话保留天数','ai.conversation.retentionDays','90','Y','system',sysdate(),'超过保留期且无活动 Run 的会话由 AI 清理任务物理清理' where not exists(select 1 from sys_config where config_key='ai.conversation.retentionDays');
 insert into sys_config(config_name,config_key,config_value,config_type,create_by,create_time,remark) select 'AI 用户允许归档会话','ai.conversation.userArchiveEnabled','true','Y','system',sysdate(),'用户是否可将自己的会话归档' where not exists(select 1 from sys_config where config_key='ai.conversation.userArchiveEnabled');
 insert into sys_config(config_name,config_key,config_value,config_type,create_by,create_time,remark) select 'AI 用户允许删除会话','ai.conversation.userDeleteEnabled','false','Y','system',sysdate(),'用户删除为软删除；到保留期后由系统物理清理' where not exists(select 1 from sys_config where config_key='ai.conversation.userDeleteEnabled');
+
+
+-- 3.5 B3: prompt content history bootstrap.
+-- Existing deployments should apply sql/ai_hardening_b1_b3_20260919.sql.
+create table if not exists ai_prompt_version (
+  prompt_version_id bigint(20)  not null auto_increment,
+  prompt_type       varchar(32) not null,
+  version_no        int         not null,
+  content           mediumtext  not null,
+  create_by         varchar(64) default '',
+  create_time       datetime    default null,
+  primary key (prompt_version_id),
+  unique key uk_ai_prompt_version_type_no (prompt_type, version_no),
+  key idx_ai_prompt_version_type_time (prompt_type, create_time)
+) engine=innodb comment='AI Prompt 历史版本';
+
+insert ignore into ai_prompt_version(prompt_type, version_no, content, create_by, create_time)
+select prompt_type, version_no, content, coalesce(nullif(update_by,''), create_by, 'system'),
+       coalesce(update_time, create_time, sysdate())
+from ai_prompt;
+
+insert ignore into ai_prompt_version(prompt_type, version_no, content, create_by, create_time)
+select prompt_type,
+       case when prompt_type='SYSTEM' then 1 when prompt_type='COMPACTION' then 2 else version_no end,
+       default_content, 'system', coalesce(create_time, sysdate())
+from ai_prompt
+where prompt_type in ('SYSTEM','COMPACTION');
