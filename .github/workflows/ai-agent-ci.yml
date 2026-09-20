@@ -16,12 +16,14 @@ jobs:
       mysql:
         image: mysql:8.0
         env:
-          MYSQL_ROOT_PASSWORD: password
-          MYSQL_DATABASE: ry-vue
+          MYSQL_ROOT_PASSWORD: '123456'
+          MYSQL_DATABASE: ruoyi_ai
+          MYSQL_USER: ruoyi_ai
+          MYSQL_PASSWORD: '123456'
         ports:
           - 3306:3306
         options: >-
-          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -ppassword"
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -p123456"
           --health-interval=10s
           --health-timeout=5s
           --health-retries=12
@@ -49,20 +51,20 @@ jobs:
 
       - name: Initialize database
         run: |
-          mysql -h127.0.0.1 -uroot -ppassword ry-vue < sql/ry_20260417.sql
-          mysql -h127.0.0.1 -uroot -ppassword ry-vue < sql/quartz.sql
-          mysql -h127.0.0.1 -uroot -ppassword ry-vue < sql/ai_fresh_install.sql
-          mysql -h127.0.0.1 -uroot -ppassword -e "update sys_config set config_value='false' where config_key='sys.account.captchaEnabled'" ry-vue
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='ry-vue' AND table_name LIKE 'ai_%';")" -ge "11"
+          mysql -h127.0.0.1 -uruoyi_ai -p123456 ruoyi_ai < sql/ry_20260417.sql
+          mysql -h127.0.0.1 -uruoyi_ai -p123456 ruoyi_ai < sql/quartz.sql
+          mysql -h127.0.0.1 -uruoyi_ai -p123456 ruoyi_ai < sql/ai_fresh_install.sql
+          mysql -h127.0.0.1 -uruoyi_ai -p123456 -e "update sys_config set config_value='false' where config_key='sys.account.captchaEnabled'" ruoyi_ai
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='ruoyi_ai' AND table_name LIKE 'ai_%';")" -ge "11"
 
       - name: Run focused AI hardening tests
-        run: mvn -B -pl ruoyi-ai -am test
+        run: mvn -B -Pci -pl ruoyi-ai -am test
 
       - name: Build backend
         shell: bash
         run: |
           set -o pipefail
-          mvn -B -DskipTests clean package 2>&1 | tee /tmp/maven-build.log
+          mvn -B -Pci -DskipTests clean package 2>&1 | tee /tmp/maven-build.log
 
       - name: Start mock OpenAI-compatible provider
         run: |
@@ -184,7 +186,7 @@ jobs:
         run: |
           sudo mkdir -p /home/ruoyi/logs /home/ruoyi/uploadPath
           sudo chown -R "$USER":"$USER" /home/ruoyi
-          nohup java -jar ruoyi-admin/target/ruoyi-admin.jar > /tmp/ruoyi-backend.log 2>&1 &
+          nohup java -jar ruoyi-admin/target/ruoyi-admin.jar --spring.profiles.active=ci > /tmp/ruoyi-backend.log 2>&1 &
           echo $! > /tmp/ruoyi-backend.pid
           for i in $(seq 1 90); do
             if curl -fsS http://127.0.0.1:8080/captchaImage >/tmp/captcha.json; then
@@ -248,8 +250,8 @@ jobs:
           JSON
           curl -fsS -H "$AUTH" -H 'Content-Type: application/json' --data-binary @/tmp/turn4.json http://127.0.0.1:8080/ai/chat/turn | tee /tmp/turn4-response.json | python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["type"]=="MESSAGE"; assert d["message"]=="TOOL_RESULT_ACCEPTED"'
 
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_pending_tool_call where conversation_id=$CONV_ID and status='RESOLVED'" ry-vue)" = "2"
-          mysql -h127.0.0.1 -uroot -ppassword -Nse "select concat((select count(*) from ai_conversation),' ',(select count(*) from ai_message),' ',(select count(*) from ai_pending_tool_call where status='RESOLVED'))" ry-vue
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select count(*) from ai_pending_tool_call where conversation_id=$CONV_ID and status='RESOLVED'" ruoyi_ai)" = "2"
+          mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select concat((select count(*) from ai_conversation),' ',(select count(*) from ai_message),' ',(select count(*) from ai_pending_tool_call where status='RESOLVED'))" ruoyi_ai
 
           CACHE_FALLBACK=$(curl -fsS -H "$AUTH" -H 'Content-Type: application/json' \
             -d "{\"modelId\":$MODEL_ID,\"userMessage\":\"CACHE_UNSUPPORTED_PROVIDER_TEST\",\"route\":\"/index\",\"pageContext\":{},\"frontendTools\":[]}" \
@@ -279,10 +281,10 @@ jobs:
           LONG2=$(curl -fsS -H "$AUTH" -H 'Content-Type: application/json' --data-binary @/tmp/long-turn2.json http://127.0.0.1:8080/ai/chat/turn)
           printf '%s' "$LONG2" | tee /tmp/long-turn2-response.json | python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["type"]=="MESSAGE"; assert d["message"]=="CHECKPOINT_CONTINUED_OK"'
 
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_checkpoint where conversation_id=$LONG_CONV_ID and status='ACTIVE' and summary like 'CHECKPOINT_OK%'" ry-vue)" -ge 1
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_message where conversation_id=$LONG_CONV_ID and role='USER' and content like 'LONG_CONTEXT_A:%'" ry-vue)" = "1"
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_message where conversation_id=$LONG_CONV_ID and role='USER' and content like 'LONG_CONTEXT_B:%'" ry-vue)" = "1"
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_run where conversation_id=$LONG_CONV_ID and status='COMPLETED' and input_tokens>0 and cache_read_tokens>0 and total_tokens>0" ry-vue)" -ge 1
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select count(*) from ai_checkpoint where conversation_id=$LONG_CONV_ID and status='ACTIVE' and summary like 'CHECKPOINT_OK%'" ruoyi_ai)" -ge 1
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select count(*) from ai_message where conversation_id=$LONG_CONV_ID and role='USER' and content like 'LONG_CONTEXT_A:%'" ruoyi_ai)" = "1"
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select count(*) from ai_message where conversation_id=$LONG_CONV_ID and role='USER' and content like 'LONG_CONTEXT_B:%'" ruoyi_ai)" = "1"
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select count(*) from ai_run where conversation_id=$LONG_CONV_ID and status='COMPLETED' and input_tokens>0 and cache_read_tokens>0 and total_tokens>0" ruoyi_ai)" -ge 1
           grep -q "COMPACTION_PROMPT_STRUCTURED=1" /tmp/mock-openai.log
           grep -q "COMPACTION_SOURCE_HAS_A=1" /tmp/mock-openai.log
           grep -q "CHECKPOINT_REINJECTED=1" /tmp/mock-openai.log
@@ -320,8 +322,8 @@ jobs:
           curl -fsS -H "$AUTH" -H 'Content-Type: application/json' --data-binary @/tmp/no-repeat-b.json http://127.0.0.1:8080/ai/chat/turn \
             | tee /tmp/no-repeat-response.json \
             | python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]; assert d["type"]=="MESSAGE"; assert d["message"]=="NO_REPEAT_OK"'
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_pending_tool_call where conversation_id=$WRITE_CONV_ID" ry-vue)" = "1"
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_checkpoint where conversation_id=$WRITE_CONV_ID and summary like '%WRITE_ALREADY_DONE%'" ry-vue)" -ge 1
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select count(*) from ai_pending_tool_call where conversation_id=$WRITE_CONV_ID" ruoyi_ai)" = "1"
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select count(*) from ai_checkpoint where conversation_id=$WRITE_CONV_ID and summary like '%WRITE_ALREADY_DONE%'" ruoyi_ai)" -ge 1
           grep -q "COMPACTION_PRESERVED_COMPLETED_WRITE=1" /tmp/mock-openai.log
           grep -q "COMPLETED_WRITE_NOT_REPEATED=1" /tmp/mock-openai.log
 

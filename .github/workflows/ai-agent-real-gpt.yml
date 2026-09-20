@@ -18,12 +18,14 @@ jobs:
       mysql:
         image: mysql:8.0
         env:
-          MYSQL_ROOT_PASSWORD: password
-          MYSQL_DATABASE: ry-vue
+          MYSQL_ROOT_PASSWORD: '123456'
+          MYSQL_DATABASE: ruoyi_ai
+          MYSQL_USER: ruoyi_ai
+          MYSQL_PASSWORD: '123456'
         ports:
           - 3306:3306
         options: >-
-          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -ppassword"
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -p123456"
           --health-interval=10s
           --health-timeout=5s
           --health-retries=12
@@ -84,21 +86,21 @@ jobs:
       - name: Initialize database
         if: steps.real_gpt.outputs.configured == 'true'
         run: |
-          mysql -h127.0.0.1 -uroot -ppassword ry-vue < sql/ry_20260417.sql
-          mysql -h127.0.0.1 -uroot -ppassword ry-vue < sql/quartz.sql
-          mysql -h127.0.0.1 -uroot -ppassword ry-vue < sql/ai_fresh_install.sql
-          mysql -h127.0.0.1 -uroot -ppassword -e "update sys_config set config_value='false' where config_key='sys.account.captchaEnabled'" ry-vue
+          mysql -h127.0.0.1 -uruoyi_ai -p123456 ruoyi_ai < sql/ry_20260417.sql
+          mysql -h127.0.0.1 -uruoyi_ai -p123456 ruoyi_ai < sql/quartz.sql
+          mysql -h127.0.0.1 -uruoyi_ai -p123456 ruoyi_ai < sql/ai_fresh_install.sql
+          mysql -h127.0.0.1 -uruoyi_ai -p123456 -e "update sys_config set config_value='false' where config_key='sys.account.captchaEnabled'" ruoyi_ai
 
       - name: Build backend
         if: steps.real_gpt.outputs.configured == 'true'
-        run: mvn -B -DskipTests clean package
+        run: mvn -B -Pci -DskipTests clean package
 
       - name: Start RuoYi backend
         if: steps.real_gpt.outputs.configured == 'true'
         run: |
           sudo mkdir -p /home/ruoyi/logs /home/ruoyi/uploadPath
           sudo chown -R "$USER":"$USER" /home/ruoyi
-          nohup java -jar ruoyi-admin/target/ruoyi-admin.jar > /tmp/ruoyi-real-gpt.log 2>&1 &
+          nohup java -jar ruoyi-admin/target/ruoyi-admin.jar --spring.profiles.active=ci > /tmp/ruoyi-real-gpt.log 2>&1 &
           echo $! > /tmp/ruoyi-real-gpt.pid
           for i in $(seq 1 90); do
             if curl -fsS http://127.0.0.1:8080/captchaImage >/tmp/captcha.json; then

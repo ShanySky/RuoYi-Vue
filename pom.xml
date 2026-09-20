@@ -32,7 +32,45 @@
         <jaxb-api.version>2.3.1</jaxb-api.version>
         <springdoc.version>3.1.0</springdoc.version>
         <spring-ai.version>2.0.1</spring-ai.version>
+        <profiles.active>local</profiles.active>
+        <spring-boot.run.profiles>${profiles.active}</spring-boot.run.profiles>
     </properties>
+
+    <profiles>
+        <profile>
+            <id>local</id>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+            <properties>
+                <profiles.active>local</profiles.active>
+            </properties>
+        </profile>
+        <profile>
+            <id>dev</id>
+            <properties>
+                <profiles.active>dev</profiles.active>
+            </properties>
+        </profile>
+        <profile>
+            <id>ci</id>
+            <properties>
+                <profiles.active>ci</profiles.active>
+            </properties>
+        </profile>
+        <profile>
+            <id>test</id>
+            <properties>
+                <profiles.active>test</profiles.active>
+            </properties>
+        </profile>
+        <profile>
+            <id>prod</id>
+            <properties>
+                <profiles.active>prod</profiles.active>
+            </properties>
+        </profile>
+    </profiles>
 
     <!-- 依赖声明 -->
     <dependencyManagement>

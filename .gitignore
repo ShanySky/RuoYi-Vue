@@ -45,3 +45,6 @@ nbdist/
 !*/build/*.java
 !*/build/*.html
 !*/build/*.xml
+
+# 本地环境配置
+/ruoyi-admin/src/main/resources/application-local.yml

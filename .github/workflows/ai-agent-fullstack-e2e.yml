@@ -26,12 +26,14 @@ jobs:
       mysql:
         image: mysql:8.0
         env:
-          MYSQL_ROOT_PASSWORD: password
-          MYSQL_DATABASE: ry-vue
+          MYSQL_ROOT_PASSWORD: '123456'
+          MYSQL_DATABASE: ruoyi_ai
+          MYSQL_USER: ruoyi_ai
+          MYSQL_PASSWORD: '123456'
         ports:
           - 3306:3306
         options: >-
-          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -ppassword"
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -p123456"
           --health-interval=10s
           --health-timeout=5s
           --health-retries=12
@@ -87,14 +89,14 @@ jobs:
 
       - name: Initialize database
         run: |
-          mysql -h127.0.0.1 -uroot -ppassword ry-vue < backend/sql/ry_20260417.sql
-          mysql -h127.0.0.1 -uroot -ppassword ry-vue < backend/sql/quartz.sql
-          mysql -h127.0.0.1 -uroot -ppassword ry-vue < backend/sql/ai_fresh_install.sql
-          mysql -h127.0.0.1 -uroot -ppassword -e "update sys_config set config_value='false' where config_key='sys.account.captchaEnabled'; insert ignore into sys_role_menu(role_id,menu_id) values(2,118),(2,1061); insert into ai_conversation(user_id,model_id,reasoning_effort,title,route,status,create_time,update_time) values(1,null,null,'H_EXPIRED_CLEANUP','/index','ACTIVE',date_sub(sysdate(),interval 120 day),date_sub(sysdate(),interval 120 day));" ry-vue
+          mysql -h127.0.0.1 -uruoyi_ai -p123456 ruoyi_ai < backend/sql/ry_20260417.sql
+          mysql -h127.0.0.1 -uruoyi_ai -p123456 ruoyi_ai < backend/sql/quartz.sql
+          mysql -h127.0.0.1 -uruoyi_ai -p123456 ruoyi_ai < backend/sql/ai_fresh_install.sql
+          mysql -h127.0.0.1 -uruoyi_ai -p123456 -e "update sys_config set config_value='false' where config_key='sys.account.captchaEnabled'; insert ignore into sys_role_menu(role_id,menu_id) values(2,118),(2,1061); insert into ai_conversation(user_id,model_id,reasoning_effort,title,route,status,create_time,update_time) values(1,null,null,'H_EXPIRED_CLEANUP','/index','ACTIVE',date_sub(sysdate(),interval 120 day),date_sub(sysdate(),interval 120 day));" ruoyi_ai
 
       - name: Build backend
         working-directory: backend
-        run: mvn -B -DskipTests clean package
+        run: mvn -B -Pci -DskipTests clean package
 
       - name: Start deterministic OpenAI-compatible mock
         run: |
@@ -376,7 +378,7 @@ jobs:
         run: |
           sudo mkdir -p /home/ruoyi/logs /home/ruoyi/uploadPath
           sudo chown -R "$USER":"$USER" /home/ruoyi
-          nohup java -jar ruoyi-admin/target/ruoyi-admin.jar > /tmp/ruoyi-backend.log 2>&1 &
+          nohup java -jar ruoyi-admin/target/ruoyi-admin.jar --spring.profiles.active=ci > /tmp/ruoyi-backend.log 2>&1 &
           echo $! > /tmp/ruoyi-backend.pid
           for i in $(seq 1 90); do
             if curl -fsS http://127.0.0.1:8080/captchaImage >/tmp/captcha.json; then
@@ -401,7 +403,7 @@ jobs:
       - name: Start Vue3 frontend
         working-directory: frontend
         run: |
-          nohup npm run dev -- --host 127.0.0.1 --port 5173 > /tmp/ruoyi-frontend.log 2>&1 &
+          nohup npm run dev:ci -- --host 127.0.0.1 --port 5173 > /tmp/ruoyi-frontend.log 2>&1 &
           echo $! > /tmp/ruoyi-frontend.pid
           for i in $(seq 1 60); do
             if curl -fsS http://127.0.0.1:5173/ >/tmp/frontend.html               && curl -fsS http://127.0.0.1:5173/dev-api/captchaImage >/tmp/frontend-captcha.json; then
@@ -439,61 +441,61 @@ jobs:
 
       - name: Verify persistence, audit redaction and Agent state
         run: |
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select nick_name from sys_user where user_id=2" ry-vue)" = "AI闭环测试"
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_pending_tool_call where status='RESOLVED'" ry-vue)" -ge 4
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_message where role='ASSISTANT' and content='AI_OK:mock-agent-model:high' and model_code='mock-agent-model' and reasoning_effort='high'" ry-vue)" -ge 1
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_message where role='ASSISTANT' and content='AI_OK:mock-secondary-model:low' and model_code='mock-secondary-model' and reasoning_effort='low'" ry-vue)" -ge 1
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from (select conversation_id from ai_message where role='ASSISTANT' and model_code is not null group by conversation_id having count(distinct model_code) >= 2) x" ry-vue)" -ge 1
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select nick_name from sys_user where user_id=2" ruoyi_ai)" = "AI闭环测试"
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select count(*) from ai_pending_tool_call where status='RESOLVED'" ruoyi_ai)" -ge 4
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select count(*) from ai_message where role='ASSISTANT' and content='AI_OK:mock-agent-model:high' and model_code='mock-agent-model' and reasoning_effort='high'" ruoyi_ai)" -ge 1
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select count(*) from ai_message where role='ASSISTANT' and content='AI_OK:mock-secondary-model:low' and model_code='mock-secondary-model' and reasoning_effort='low'" ruoyi_ai)" -ge 1
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select count(*) from (select conversation_id from ai_message where role='ASSISTANT' and model_code is not null group by conversation_id having count(distinct model_code) >= 2) x" ruoyi_ai)" -ge 1
 
           # Phase-three Run control must be true in the backend, not only hidden by the browser.
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_run where status='CANCELLED' and cancel_reason='USER_STOP'" ry-vue)" -ge 1
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_run where status='CANCELLED' and cancel_reason='DOUBLE_ESC'" ry-vue)" -ge 1
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_run where status='SUPERSEDED' and cancel_reason='STEERING'" ry-vue)" -ge 1
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_run where status='COMPACTING'" ry-vue)" = "0"
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_model where context_window_tokens<>65536 or auto_compaction<>'0' or compaction_threshold_percent<>75" ry-vue)" = "0"
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_message where role='ASSISTANT' and content in ('SLOW_STOP_DONE','SLOW_ESC_DONE','STEER_OLD_DONE')" ry-vue)" = "0"
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_message where role='ASSISTANT' and content='STEER_NEW_OK'" ry-vue)" -ge 1
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select chat_font_size from ai_user_preference where user_id=1" ry-vue)" = "standard"
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select count(*) from ai_run where status='CANCELLED' and cancel_reason='USER_STOP'" ruoyi_ai)" -ge 1
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select count(*) from ai_run where status='CANCELLED' and cancel_reason='DOUBLE_ESC'" ruoyi_ai)" -ge 1
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select count(*) from ai_run where status='SUPERSEDED' and cancel_reason='STEERING'" ruoyi_ai)" -ge 1
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select count(*) from ai_run where status='COMPACTING'" ruoyi_ai)" = "0"
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select count(*) from ai_model where context_window_tokens<>65536 or auto_compaction<>'0' or compaction_threshold_percent<>75" ruoyi_ai)" = "0"
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select count(*) from ai_message where role='ASSISTANT' and content in ('SLOW_STOP_DONE','SLOW_ESC_DONE','STEER_OLD_DONE')" ruoyi_ai)" = "0"
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select count(*) from ai_message where role='ASSISTANT' and content='STEER_NEW_OK'" ruoyi_ai)" -ge 1
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select chat_font_size from ai_user_preference where user_id=1" ruoyi_ai)" = "standard"
 
           # Phase-three Conversation recovery and account preferences must survive real reload/logout flows.
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_conversation where user_id=1 and title='G_HISTORY_RESTORE_TEST'" ry-vue)" -ge 1
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_conversation where user_id=1 and title='G_RENAMED_CONVERSATION'" ry-vue)" -ge 1
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_run where user_id=1 and status='CANCELLED' and cancel_reason='CLIENT_RELOAD'" ry-vue)" -ge 1
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_run where user_id=1 and status='CANCELLED' and cancel_reason='USER_LOGOUT'" ry-vue)" -ge 1
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select history_entry_visible from ai_user_preference where user_id=1" ry-vue)" = "0"
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select auto_restore_last_conversation from ai_user_preference where user_id=1" ry-vue)" = "1"
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select send_shortcut from ai_user_preference where user_id=1" ry-vue)" = "ctrl-enter"
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_conversation where title='H_EXPIRED_CLEANUP'" ry-vue)" = "0"
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select config_value from sys_config where config_key='ai.conversation.retentionDays'" ry-vue)" = "90"
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select config_value from sys_config where config_key='ai.conversation.userArchiveEnabled'" ry-vue)" = "true"
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select config_value from sys_config where config_key='ai.conversation.userDeleteEnabled'" ry-vue)" = "false"
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select enabled from ai_page_config where route='/system/user'" ry-vue)" = "0"
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_prompt where content=default_content and enabled='0'" ry-vue)" = "2"
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_checkpoint where summary like '%H_COMPACTION_APPLIED%'" ry-vue)" -ge 1
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_checkpoint where summary like '%DEFAULT_COMPACTION_APPLIED%'" ry-vue)" -ge 1
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_run r join ai_conversation c on c.conversation_id=r.conversation_id where c.title like 'UI_COMPACT_STOP_ONE%' and r.status='CANCELLED' and r.cancel_reason='USER_STOP'" ry-vue)" -ge 1
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_run r join ai_conversation c on c.conversation_id=r.conversation_id where c.title like 'UI_COMPACT_RELOAD_ONE%' and r.status='CANCELLED' and r.cancel_reason='CLIENT_RELOAD'" ry-vue)" -ge 1
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_run r join ai_conversation c on c.conversation_id=r.conversation_id where c.title like 'UI_COMPACT_STEER_ONE%' and r.status='SUPERSEDED' and r.cancel_reason='STEERING'" ry-vue)" -ge 1
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_checkpoint cp join ai_run r on r.run_id=cp.run_id join ai_conversation c on c.conversation_id=r.conversation_id where c.title like 'UI_COMPACT_STEER_ONE%' and r.status='SUPERSEDED' and r.cancel_reason='STEERING'" ry-vue)" = "0"
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_checkpoint c join ai_conversation v on v.conversation_id=c.conversation_id where v.title like 'UI_COMPACT_STOP_ONE%' or v.title like 'UI_COMPACT_RELOAD_ONE%'" ry-vue)" = "0"
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_message where role='ASSISTANT' and content='STEER_COMPACT_NEW_OK'" ry-vue)" -ge 1
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_message where role='ASSISTANT' and content='WRITE_COMPLETED_THEN_STEERED'" ry-vue)" -ge 1
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_message where role='ASSISTANT' and content='STEER_WRITE_DONE_OLD_FINISHED'" ry-vue)" = "0"
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_pending_tool_call where tool_name like 'page_%' and (capability_protocol is null or capability_protocol<>'ruoyi-semantic-page-v1' or page_id is null or page_id='' or route is null or route='' or page_instance_id is null or page_instance_id='' or page_version is null)" ry-vue)" = "0"
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_pending_tool_call where capability_protocol='ruoyi-semantic-page-v1' and page_id='system.user' and route='/system/user'" ry-vue)" -ge 1
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_run r join ai_checkpoint c on c.run_id=r.run_id where c.summary like '%H_COMPACTION_APPLIED%' and r.compaction_prompt_version > 2" ry-vue)" -ge 1
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_message where role='ASSISTANT' and content='AI_OK:mock-agent-model:none' and reasoning_effort='none'" ry-vue)" -ge 1
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_message where role='ASSISTANT' and content='AI_OK:mock-agent-model:max' and reasoning_effort='max'" ry-vue)" -ge 1
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from sys_user where user_name like 'a3%' and del_flag='0'" ry-vue)" = "0"
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from sys_user where user_name like 'a3%' and del_flag='2' and remark='R3 F4 full edit acceptance'" ry-vue)" -ge 1
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from sys_oper_log where title in ('AI Prompt 配置','AI Prompt 恢复默认','AI 页面能力','AI 会话策略','AI 会话过期清理','AI 会话审计查看')" ry-vue)" -ge 6
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from sys_role_menu where role_id=2 and menu_id in (118,1061)" ry-vue)" = "2"
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from sys_role_menu where role_id=2 and menu_id=2107" ry-vue)" = "0"
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select count(*) from ai_conversation where user_id=1 and title='G_HISTORY_RESTORE_TEST'" ruoyi_ai)" -ge 1
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select count(*) from ai_conversation where user_id=1 and title='G_RENAMED_CONVERSATION'" ruoyi_ai)" -ge 1
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select count(*) from ai_run where user_id=1 and status='CANCELLED' and cancel_reason='CLIENT_RELOAD'" ruoyi_ai)" -ge 1
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select count(*) from ai_run where user_id=1 and status='CANCELLED' and cancel_reason='USER_LOGOUT'" ruoyi_ai)" -ge 1
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select history_entry_visible from ai_user_preference where user_id=1" ruoyi_ai)" = "0"
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select auto_restore_last_conversation from ai_user_preference where user_id=1" ruoyi_ai)" = "1"
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select send_shortcut from ai_user_preference where user_id=1" ruoyi_ai)" = "ctrl-enter"
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select count(*) from ai_conversation where title='H_EXPIRED_CLEANUP'" ruoyi_ai)" = "0"
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select config_value from sys_config where config_key='ai.conversation.retentionDays'" ruoyi_ai)" = "90"
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select config_value from sys_config where config_key='ai.conversation.userArchiveEnabled'" ruoyi_ai)" = "true"
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select config_value from sys_config where config_key='ai.conversation.userDeleteEnabled'" ruoyi_ai)" = "false"
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select enabled from ai_page_config where route='/system/user'" ruoyi_ai)" = "0"
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select count(*) from ai_prompt where content=default_content and enabled='0'" ruoyi_ai)" = "2"
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select count(*) from ai_checkpoint where summary like '%H_COMPACTION_APPLIED%'" ruoyi_ai)" -ge 1
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select count(*) from ai_checkpoint where summary like '%DEFAULT_COMPACTION_APPLIED%'" ruoyi_ai)" -ge 1
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select count(*) from ai_run r join ai_conversation c on c.conversation_id=r.conversation_id where c.title like 'UI_COMPACT_STOP_ONE%' and r.status='CANCELLED' and r.cancel_reason='USER_STOP'" ruoyi_ai)" -ge 1
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select count(*) from ai_run r join ai_conversation c on c.conversation_id=r.conversation_id where c.title like 'UI_COMPACT_RELOAD_ONE%' and r.status='CANCELLED' and r.cancel_reason='CLIENT_RELOAD'" ruoyi_ai)" -ge 1
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select count(*) from ai_run r join ai_conversation c on c.conversation_id=r.conversation_id where c.title like 'UI_COMPACT_STEER_ONE%' and r.status='SUPERSEDED' and r.cancel_reason='STEERING'" ruoyi_ai)" -ge 1
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select count(*) from ai_checkpoint cp join ai_run r on r.run_id=cp.run_id join ai_conversation c on c.conversation_id=r.conversation_id where c.title like 'UI_COMPACT_STEER_ONE%' and r.status='SUPERSEDED' and r.cancel_reason='STEERING'" ruoyi_ai)" = "0"
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select count(*) from ai_checkpoint c join ai_conversation v on v.conversation_id=c.conversation_id where v.title like 'UI_COMPACT_STOP_ONE%' or v.title like 'UI_COMPACT_RELOAD_ONE%'" ruoyi_ai)" = "0"
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select count(*) from ai_message where role='ASSISTANT' and content='STEER_COMPACT_NEW_OK'" ruoyi_ai)" -ge 1
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select count(*) from ai_message where role='ASSISTANT' and content='WRITE_COMPLETED_THEN_STEERED'" ruoyi_ai)" -ge 1
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select count(*) from ai_message where role='ASSISTANT' and content='STEER_WRITE_DONE_OLD_FINISHED'" ruoyi_ai)" = "0"
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select count(*) from ai_pending_tool_call where tool_name like 'page_%' and (capability_protocol is null or capability_protocol<>'ruoyi-semantic-page-v1' or page_id is null or page_id='' or route is null or route='' or page_instance_id is null or page_instance_id='' or page_version is null)" ruoyi_ai)" = "0"
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select count(*) from ai_pending_tool_call where capability_protocol='ruoyi-semantic-page-v1' and page_id='system.user' and route='/system/user'" ruoyi_ai)" -ge 1
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select count(*) from ai_run r join ai_checkpoint c on c.run_id=r.run_id where c.summary like '%H_COMPACTION_APPLIED%' and r.compaction_prompt_version > 2" ruoyi_ai)" -ge 1
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select count(*) from ai_message where role='ASSISTANT' and content='AI_OK:mock-agent-model:none' and reasoning_effort='none'" ruoyi_ai)" -ge 1
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select count(*) from ai_message where role='ASSISTANT' and content='AI_OK:mock-agent-model:max' and reasoning_effort='max'" ruoyi_ai)" -ge 1
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select count(*) from sys_user where user_name like 'a3%' and del_flag='0'" ruoyi_ai)" = "0"
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select count(*) from sys_user where user_name like 'a3%' and del_flag='2' and remark='R3 F4 full edit acceptance'" ruoyi_ai)" -ge 1
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select count(*) from sys_oper_log where title in ('AI Prompt 配置','AI Prompt 恢复默认','AI 页面能力','AI 会话策略','AI 会话过期清理','AI 会话审计查看')" ruoyi_ai)" -ge 6
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select count(*) from sys_role_menu where role_id=2 and menu_id in (118,1061)" ruoyi_ai)" = "2"
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select count(*) from sys_role_menu where role_id=2 and menu_id=2107" ruoyi_ai)" = "0"
 
           sleep 2
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from sys_oper_log where title='AI 服务配置' and oper_param like '%e2e-provider-placeholder%'" ry-vue)" = "0"
-          test "$(mysql -h127.0.0.1 -uroot -ppassword -Nse "select count(*) from ai_provider where token_cipher like 'v1:%' and token_cipher not like '%e2e-provider-placeholder%'" ry-vue)" = "1"
-          mysql -h127.0.0.1 -uroot -ppassword -e "update sys_user set nick_name='若依' where user_id=2" ry-vue
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select count(*) from sys_oper_log where title='AI 服务配置' and oper_param like '%e2e-provider-placeholder%'" ruoyi_ai)" = "0"
+          test "$(mysql -h127.0.0.1 -uruoyi_ai -p123456 -Nse "select count(*) from ai_provider where token_cipher like 'v1:%' and token_cipher not like '%e2e-provider-placeholder%'" ruoyi_ai)" = "1"
+          mysql -h127.0.0.1 -uruoyi_ai -p123456 -e "update sys_user set nick_name='若依' where user_id=2" ruoyi_ai
 
       - name: Upload E2E diagnostics
         if: always()

@@ -19,12 +19,14 @@ jobs:
       mysql:
         image: mysql:8.0
         env:
-          MYSQL_ROOT_PASSWORD: password
-          MYSQL_DATABASE: ry-vue
+          MYSQL_ROOT_PASSWORD: '123456'
+          MYSQL_DATABASE: ruoyi_ai
+          MYSQL_USER: ruoyi_ai
+          MYSQL_PASSWORD: '123456'
         ports:
           - 3306:3306
         options: >-
-          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -ppassword"
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -p123456"
           --health-interval=10s
           --health-timeout=5s
           --health-retries=12
@@ -73,10 +75,10 @@ jobs:
 
       - name: Initialize database
         run: |
-          mysql -h127.0.0.1 -uroot -ppassword ry-vue < backend/sql/ry_20260417.sql
-          mysql -h127.0.0.1 -uroot -ppassword ry-vue < backend/sql/quartz.sql
-          mysql -h127.0.0.1 -uroot -ppassword ry-vue < backend/sql/ai_fresh_install.sql
-          mysql -h127.0.0.1 -uroot -ppassword -e "update sys_config set config_value='false' where config_key='sys.account.captchaEnabled'" ry-vue
+          mysql -h127.0.0.1 -uruoyi_ai -p123456 ruoyi_ai < backend/sql/ry_20260417.sql
+          mysql -h127.0.0.1 -uruoyi_ai -p123456 ruoyi_ai < backend/sql/quartz.sql
+          mysql -h127.0.0.1 -uruoyi_ai -p123456 ruoyi_ai < backend/sql/ai_fresh_install.sql
+          mysql -h127.0.0.1 -uruoyi_ai -p123456 -e "update sys_config set config_value='false' where config_key='sys.account.captchaEnabled'" ruoyi_ai
 
       - name: Preconfigure preview AI provider
         env:
@@ -110,7 +112,7 @@ jobs:
           JAVA
           javac /tmp/PreviewToken.java
           TOKEN_CIPHER=$(java -cp /tmp PreviewToken)
-          mysql -h127.0.0.1 -uroot -ppassword ry-vue <<SQL
+          mysql -h127.0.0.1 -uruoyi_ai -p123456 ruoyi_ai <<SQL
           insert into ai_provider(name, provider_type, base_url, token_cipher, enabled, timeout_seconds, create_by, create_time, remark)
           values('AI 预览 Mock', 'OPENAI_COMPATIBLE', 'http://127.0.0.1:18080/v1', '$TOKEN_CIPHER', '0', 30, 'preview', sysdate(), '临时公网预览使用，Runner 销毁后自动消失');
           set @provider_id = last_insert_id();
@@ -170,7 +172,7 @@ jobs:
 
       - name: Build backend
         working-directory: backend
-        run: mvn -B -DskipTests clean package
+        run: mvn -B -Pci -DskipTests clean package
 
       - name: Start preview mock model
         run: |
@@ -318,7 +320,7 @@ jobs:
         run: |
           sudo mkdir -p /home/ruoyi/logs /home/ruoyi/uploadPath
           sudo chown -R "$USER":"$USER" /home/ruoyi
-          nohup java -jar ruoyi-admin/target/ruoyi-admin.jar > /tmp/ruoyi-backend.log 2>&1 &
+          nohup java -jar ruoyi-admin/target/ruoyi-admin.jar --spring.profiles.active=ci > /tmp/ruoyi-backend.log 2>&1 &
           echo $! > /tmp/ruoyi-backend.pid
           for i in $(seq 1 90); do
             if curl -fsS http://127.0.0.1:8080/captchaImage >/tmp/captcha.json; then
@@ -356,7 +358,7 @@ jobs:
       - name: Start Vue3 frontend
         working-directory: frontend
         run: |
-          nohup npm run dev -- --host 0.0.0.0 --port 5173 > /tmp/ruoyi-frontend.log 2>&1 &
+          nohup npm run dev:ci -- --host 0.0.0.0 --port 5173 > /tmp/ruoyi-frontend.log 2>&1 &
           echo $! > /tmp/ruoyi-frontend.pid
           for i in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:5173/ >/tmp/frontend.html               && curl -fsS http://127.0.0.1:5173/dev-api/captchaImage >/tmp/frontend-captcha.json; then
