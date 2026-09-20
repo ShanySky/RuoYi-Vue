@@ -15,6 +15,11 @@ on:
       - 'sql/ai_fresh_install.sql'
       - 'sql/ai_migrations/**'
       - 'scripts/ci/**'
+  pull_request:
+    branches:
+      - chatgpt/ai-agent-assistant
+    paths:
+      - '.github/workflows/ai-agent-fullstack-e2e.yml'
   workflow_dispatch:
 
 jobs:
@@ -55,7 +60,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ShanySky/RuoYi-Vue3
-          ref: ${{ github.ref_name == 'chatgpt/ai-agent-hardening-phase35-p0' && 'chatgpt/ai-agent-hardening-phase35-p0' || github.ref_name == 'chatgpt/ai-agent-phase35-p1-closure' && 'chatgpt/ai-agent-phase35-p1-closure' || 'chatgpt/ai-agent-assistant' }}
+          ref: ${{ github.event_name == 'pull_request' && 'chatgpt/ai-settings-boundary-closure' || github.ref_name == 'chatgpt/ai-agent-hardening-phase35-p0' && 'chatgpt/ai-agent-hardening-phase35-p0' || github.ref_name == 'chatgpt/ai-agent-phase35-p1-closure' && 'chatgpt/ai-agent-phase35-p1-closure' || 'chatgpt/ai-agent-assistant' }}
           path: frontend
 
       - name: Record acceptance revisions
@@ -409,6 +414,14 @@ jobs:
       - name: Validate frontend Capability Contract v1
         working-directory: frontend
         run: node tests/ai-capability-contract.test.mjs
+
+      - name: Validate AI settings boundary contract
+        working-directory: frontend
+        run: node tests/ai-settings-boundary.test.mjs
+
+      - name: Build frontend production bundle
+        working-directory: frontend
+        run: npm run build:prod
 
       # Browser acceptance always uses the paired frontend branch selected above.
       - name: Run browser closed-loop acceptance
