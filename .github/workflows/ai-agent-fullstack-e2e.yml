@@ -68,7 +68,7 @@ jobs:
         run: |
           {
             echo "BACKEND_REF=${{ github.ref_name }}"
-            echo "FRONTEND_REF=${{ github.ref_name == 'chatgpt/ai-agent-hardening-phase35-p0' && 'chatgpt/ai-agent-hardening-phase35-p0' || github.ref_name == 'chatgpt/ai-agent-phase35-p1-closure' && 'chatgpt/ai-agent-phase35-p1-closure' || 'chatgpt/ai-agent-assistant' }}"
+            echo "FRONTEND_REF=${{ github.ref_name == 'chatgpt/ai-settings-boundary-closure' && 'chatgpt/ai-settings-boundary-closure' || github.event_name == 'pull_request' && 'chatgpt/ai-settings-boundary-closure' || github.ref_name == 'chatgpt/ai-agent-hardening-phase35-p0' && 'chatgpt/ai-agent-hardening-phase35-p0' || github.ref_name == 'chatgpt/ai-agent-phase35-p1-closure' && 'chatgpt/ai-agent-phase35-p1-closure' || 'chatgpt/ai-agent-assistant' }}"
             echo "BACKEND_SHA=$(git -C backend rev-parse HEAD)"
             echo "FRONTEND_SHA=$(git -C frontend rev-parse HEAD)"
           } | tee /tmp/acceptance-revisions.txt
