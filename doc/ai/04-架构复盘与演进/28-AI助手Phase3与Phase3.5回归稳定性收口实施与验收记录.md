@@ -316,3 +316,107 @@ Fullstack E2E 的“History entry is opt-in; restore and undo preserve the previ
 - 权限、WRITE 确认、Tool Policy、Run 状态仍由正式代码和若依权限体系保证。
 
 下一步只执行 Git / PR 收口，并在合入 `chatgpt/ai-agent-assistant` 后对主线 revision 再运行关键验收；主线复验结果追加到本记录。
+
+
+## 9. AI 主线合入与最终复验
+
+### 9.1 PR 收口
+
+Frontend：
+
+- PR：`ShanySky/RuoYi-Vue3#11`
+- 合并方式：squash。
+- AI 主线 revision：`00fdcc36fc5e269cd41e1ea5803decbcafc91dee`
+
+Backend：
+
+- PR：`ShanySky/RuoYi-Vue#20`
+- 合并方式：squash。
+- AI 主线产品 revision：`7426f09a66f058f037389c9dd8b28e4b2815b145`
+
+Frontend 先合入，再合入 Backend，保证 Backend 主线触发 Fullstack E2E 时能够配对到已经包含 timeout 修复的 Frontend 主线。
+
+### 9.2 Frontend 主线复验
+
+- Workflow：`AI Agent Frontend CI`
+- Run：#251
+- Run ID：`35504096864`
+- Revision：`00fdcc36fc5e269cd41e1ea5803decbcafc91dee`
+- 结果：SUCCESS
+
+Capability Contract、AI settings boundary contract 与 production build 均通过。
+
+### 9.3 Backend 主线复验
+
+- Workflow：`AI Agent Backend CI`
+- Run：#393
+- Run ID：`35504118901`
+- Revision：`7426f09a66f058f037389c9dd8b28e4b2815b145`
+- 结果：SUCCESS
+
+其中 fresh-install / ordered migration schema acceptance、MySQL、Redis、focused AI tests、Backend build、Provider / Agent API、B1-B3 与 Phase 3.5 P0 invariants 均通过。
+
+### 9.4 Fullstack 主线复验
+
+- Workflow：`AI Agent Fullstack E2E`
+- Run：#188
+- Run ID：`35504118902`
+- 结果：SUCCESS
+- Backend：`7426f09a66f058f037389c9dd8b28e4b2815b145`
+- Frontend：`00fdcc36fc5e269cd41e1ea5803decbcafc91dee`
+
+主线 artifact 再次确认：
+
+- Browser closed-loop acceptance：SUCCESS。
+- `AI_AGENT_MODEL_SELECTION_E2E_OK`。
+- 两个模型完整 capability detection 实际耗时约 13,917 ms / 13,921 ms，超过原 Frontend 10 秒公共 timeout 后仍成功。
+- 历史会话恢复、真实 Agent Tool Loop、WRITE、Run、Page Capability、Prompt / Compaction / Audit 等场景全部通过。
+- artifact 中无 `Unknown column`、`SQLSyntaxErrorException` 或 `capability_protocol` 缺字段异常。
+
+### 9.5 Real GPT 主线复验
+
+- Workflow：`AI Agent Real GPT Acceptance`
+- Run：#10
+- Run ID：`35504118913`
+- Revision：`7426f09a66f058f037389c9dd8b28e4b2815b145`
+- 结果：SUCCESS
+
+真实证据：
+
+- Model：`gpt-5.6-luna`
+- Reasoning：`low`
+- reasoning capability confirmed：true
+- cache read tokens：2816
+- Checkpoint：1
+- checkpoint / continuation preserved：true
+- Runtime reset：64K / 75%
+
+### 9.6 Public Preview 主线复验
+
+- Workflow：`AI Agent Public Preview`
+- Run：#17
+- Run ID：`35504118905`
+- Backend：`7426f09a66f058f037389c9dd8b28e4b2815b145`
+- Frontend：`00fdcc36fc5e269cd41e1ea5803decbcafc91dee`
+- `Verify public preview`：SUCCESS
+- canonical `ai_fresh_install.sql` 初始化：SUCCESS
+
+本次主线临时公网预览：
+
+`https://touring-performance-madonna-pastor.trycloudflare.com`
+
+该地址仅在对应 GitHub Actions Runner keep-alive 生命周期内有效。
+
+## 10. 最终回到用户原始诉求
+
+本轮最终结论：
+
+1. 模型加入系统 / 手工重新检测 reasoning 时的 10 秒 Frontend timeout 根因已修复，并通过约 13.9 秒真实 Browser 请求证明。
+2. 聊天执行页面 Tool 与点击历史会话的 `capability_protocol` SQL 异常属于同一个 Public Preview Schema 漂移根因；已改为 canonical fresh schema，并增加 CI 防回归。
+3. 同类 Real GPT workflow Schema 漂移也已一并清理。
+4. fresh install 与旧数据库 ordered upgrade 最终 AI Schema 一致性已自动验证。
+5. Phase 1 / Phase 2 / Phase 3 / Phase 3.5 当前仍保留的主要功能已通过主线 Fullstack Browser E2E 回归。
+6. 已经正式删除、迁移或从未实现的能力没有被错误“恢复”；例如第一阶段正式记录即明确采用同步 HTTP Turn，并未实现 token-by-token SSE。
+7. 修复已经进入前后端 `chatgpt/ai-agent-assistant`，并在合入后的真实主线 revision 上完成 Backend / Frontend / Browser / Real GPT / Public Preview 复验。
+
+因此，本轮“修复三个现场 BUG，并确认此前正常且当前仍保留的主要功能没有被 Phase 3 / Phase 3.5 改造破坏”的原始诉求已经完成。
