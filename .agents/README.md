@@ -8,7 +8,7 @@
 
 ## 1. 核心原则
 
-- Conversation 是当前工作台，GitHub 是长期事实源。
+- Conversation 是当前工作台；canonical Git 远端是共享主线的长期事实源，当前未提交 / 未推送实施事实以当前 Working Tree 和实际执行上下文为准。
 - ChatGPT Project 只承担 Bootstrap，不维护频繁变化的项目状态。
 - `AGENTS.md` 是仓库入口和 Router，不是超级系统提示词。
 - Rule 记录稳定约束；Skill 记录可重复执行流程；`doc/ai/` 记录架构、决策和阶段状态。
@@ -19,7 +19,7 @@
 
 ### L0：ChatGPT Project —— Bootstrap
 
-只保留稳定入口信息：项目定位、两个仓库、默认 AI 主线、基本工作原则，以及“开始工作前先检查 GitHub 当前状态”。
+只保留稳定入口信息：项目定位、两个仓库、默认 AI 主线、基本工作原则，以及“开始工作前先识别当前执行上下文；需要判断共享主线时再核实 GitHub 当前状态”。
 
 不维护当前阶段进度、最近提交、临时 blocker、动态架构结论或频繁演进的 Rule / Skill 正文。
 
@@ -103,7 +103,7 @@ RuoYi-Vue/
 
 ## 4. 项目级与仓库级规则
 
-项目级规则例如 Git 工作流、推进目标、跨仓库协作、全栈验收，canonical source 优先放后端。
+项目级规则例如执行上下文与能力边界、Git 工作流、推进目标、跨仓库协作、全栈验收，canonical source 优先放后端。
 
 如果只打开前端仓库也必须能工作，可以保留精简镜像，但必须明确 canonical source，避免两份规则独立演进。
 
@@ -114,7 +114,9 @@ RuoYi-Vue/
 ```text
 用户当前目标
     ↓
-确认目标仓库、目标分支和 GitHub 当前状态
+识别当前执行上下文、目标仓库 / 工作区、目标分支和真实可用能力
+    ↓
+需要判断共享主线或远端事实时，再核实 canonical Git 远端 / GitHub 当前状态
     ↓
 读取目标仓库 AGENTS.md
     ↓
@@ -124,7 +126,7 @@ RuoYi-Vue/
     ↓
 读取相关真实代码、配置、测试和 workflow
     ↓
-开始讨论 / 计划 / 实施 / 验收
+在当前执行上下文内开始讨论 / 计划 / 实施 / 验收
 ```
 
 不要默认加载所有文档、所有 Rule、所有 Skill。
@@ -146,6 +148,7 @@ RuoYi-Vue/
 ### GitHub
 
 - 两个 `AGENTS.md`：保留并收敛为 Router。
+- `.agents/rules/execution-context.md`：后端为 canonical，前端保留可独立工作的 mirror。
 - `.agents/rules/git-workflow.md`：后端为 canonical，前端保留可独立工作的 mirror。
 - `.agents/rules/progress-goal.md`：后端项目级 canonical。
 - `.agents/skills/fullstack-validation/SKILL.md`：后端项目级 canonical。
