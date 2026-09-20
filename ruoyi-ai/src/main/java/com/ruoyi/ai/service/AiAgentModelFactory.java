@@ -50,6 +50,7 @@ public class AiAgentModelFactory
                 .model(model.getModelCode())
                 .timeout(Duration.ofSeconds(timeout))
                 .maxRetries(0)
+                .maxCompletionTokens(AiTokenBudget.outputLimit(model))
                 .parallelToolCalls(false)
                 .toolCallbacks(tools);
         if (reasoningEffort != null && !reasoningEffort.isBlank())

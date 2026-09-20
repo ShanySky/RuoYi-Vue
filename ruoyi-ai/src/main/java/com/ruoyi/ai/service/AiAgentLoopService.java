@@ -10,10 +10,13 @@ import com.ruoyi.ai.domain.AiPrompt;
 import com.ruoyi.ai.domain.AiRun;
 import com.ruoyi.ai.dto.AiChatTurnRequest;
 import com.ruoyi.ai.dto.AiChatTurnResponse;
+import com.ruoyi.ai.dto.AiToolResultRequest;
 import com.ruoyi.ai.mapper.AiConversationMapper;
 import com.ruoyi.ai.runtime.AgentRuntime;
 import com.ruoyi.ai.runtime.AgentRuntimeRequest;
 import com.ruoyi.ai.runtime.AgentRuntimeResult;
+import com.ruoyi.ai.server.AiBusinessHistoryGuard;
+import com.ruoyi.ai.server.AiServerToolService;
 import com.ruoyi.ai.tool.AiFrontendToolPolicy.ApprovedTool;
 import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.common.utils.SecurityUtils;
@@ -31,11 +34,13 @@ public class AiAgentLoopService
     private final AiRunService runService;
     private final AiPromptContextAssembler contextAssembler;
     private final AiToolCallCoordinator toolCoordinator;
+    private final AiServerToolService serverTools;
+    private final AiBusinessHistoryGuard historyGuard;
 
     public AiAgentLoopService(AiConversationMapper conversationMapper, AiMessageService messageService,
             AgentRuntime agentRuntime, AiConfigService configService, AiPreferenceService preferenceService,
             AiPromptService promptService, AiRunService runService, AiPromptContextAssembler contextAssembler,
-            AiToolCallCoordinator toolCoordinator)
+            AiToolCallCoordinator toolCoordinator, AiServerToolService serverTools, AiBusinessHistoryGuard historyGuard)
     {
         this.conversationMapper = conversationMapper;
         this.messageService = messageService;
@@ -46,6 +51,8 @@ public class AiAgentLoopService
         this.runService = runService;
         this.contextAssembler = contextAssembler;
         this.toolCoordinator = toolCoordinator;
+        this.serverTools = serverTools;
+        this.historyGuard = historyGuard;
     }
 
     public AiChatTurnResponse turn(AiChatTurnRequest request)
@@ -54,6 +61,7 @@ public class AiAgentLoopService
         toolCoordinator.validateRequest(request);
         Long userId = SecurityUtils.getUserId();
         AiConversation conversation = resolveConversation(request, userId);
+        historyGuard.requireReadable(conversation.getConversationId());
         TurnSelection selection;
         AiRun run;
 
@@ -144,7 +152,8 @@ public class AiAgentLoopService
             return runState(conversation, run);
         }
 
-        List<ApprovedTool> approvedTools = toolCoordinator.approveTools(request);
+        historyGuard.requireReadable(conversation.getConversationId());
+        List<ApprovedTool> approvedTools = toolCoordinator.approveTools(request, run);
         AiModel selectedModel = configService.requireModel(selection.modelId());
         AiPromptContextAssembler.AssembledContext assembled = contextAssembler.assemble(
                 conversation, run, selectedModel, selection.reasoningEffort(), request, approvedTools);
@@ -171,6 +180,7 @@ public class AiAgentLoopService
             throw new ServiceException("AI 模型未返回有效响应");
         }
         runService.recordUsage(run.getRunId(), response.usage());
+        historyGuard.requireReadable(conversation.getConversationId());
         if (!runService.runnable(run.getRunId()))
         {
             return runState(conversation, runService.get(run.getRunId()));
@@ -203,12 +213,25 @@ public class AiAgentLoopService
             return runState(conversation, runService.get(run.getRunId()));
         }
 
+        if (serverTools.supports(prepared.name()) && "READ".equals(prepared.riskLevel()))
+        {
+            serverTools.execute(conversation.getConversationId(), prepared.callId(), true);
+            if (!"WAITING_TOOL".equals(runService.get(run.getRunId()).getStatus()))
+                return runState(conversation, runService.get(run.getRunId()));
+            AiToolResultRequest result = new AiToolResultRequest();
+            result.setCallId(prepared.callId());
+            request.setToolResult(result);
+            toolCoordinator.acceptToolResult(conversation, conversation.getUserId(), request);
+            return callModel(conversation, request, selection, run);
+        }
+
         AiChatTurnResponse.ToolCall call = new AiChatTurnResponse.ToolCall();
         call.setCallId(prepared.callId());
         call.setName(prepared.name());
         call.setArguments(prepared.arguments());
         call.setRiskLevel(prepared.riskLevel());
         call.setDescription(prepared.description());
+        call.setExecutionSide(serverTools.supports(prepared.name()) ? "SERVER" : "BROWSER");
         return AiChatTurnResponse.toolCall(conversation.getConversationId(), run.getRunId(), call);
     }
 

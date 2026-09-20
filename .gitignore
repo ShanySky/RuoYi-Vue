@@ -48,3 +48,6 @@ nbdist/
 
 # 本地环境配置
 /ruoyi-admin/src/main/resources/application-local.yml
+
+# 任务验收脚本的解释器缓存
+/scripts/local/__pycache__/

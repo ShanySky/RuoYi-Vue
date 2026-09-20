@@ -60,6 +60,6 @@ public class AiContextService {
  private void appendToolDetails(StringBuilder payload,AiMessage message){
   if(StringUtils.isNotBlank(message.getToolName()))payload.append(" [").append(message.getToolName()).append(" ").append(StringUtils.defaultString(message.getToolArguments())).append("]");
  }
- public int estimate(String system,String checkpoint,List<AiMessage> recent,String runtimeOverhead){long chars=length(system)+length(checkpoint)+length(runtimeOverhead);for(AiMessage m:recent)chars+=length(m.getContent())+length(m.getToolArguments())+64;return (int)Math.min(Integer.MAX_VALUE,Math.max(1,chars/4+512));}
- private int length(String s){return s==null?0:s.length();} private String safe(Exception e){String s=e.getMessage();return s==null?e.getClass().getSimpleName():s.substring(0,Math.min(180,s.length()));}
+ public int estimate(String system,String checkpoint,List<AiMessage> recent,String runtimeOverhead){long tokens=AiTokenBudget.estimate(system)+AiTokenBudget.estimate(checkpoint)+AiTokenBudget.estimate(runtimeOverhead);for(AiMessage m:recent)tokens+=AiTokenBudget.estimate(m.getContent())+AiTokenBudget.estimate(m.getToolArguments())+16;return (int)Math.min(Integer.MAX_VALUE,Math.max(1,tokens+512));}
+ private String safe(Exception e){String s=e.getMessage();return s==null?e.getClass().getSimpleName():s.substring(0,Math.min(180,s.length()));}
 }

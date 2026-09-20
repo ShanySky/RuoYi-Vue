@@ -13,6 +13,7 @@ import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.stereotype.Service;
 import com.ruoyi.ai.service.AiAgentModelFactory;
+import com.ruoyi.ai.service.AiTokenBudget;
 import com.ruoyi.ai.tool.AiFrontendToolCallback;
 import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.common.utils.StringUtils;
@@ -38,6 +39,7 @@ public class SpringAiAgentRuntime implements AgentRuntime
 
         AiAgentModelFactory.ModelRuntime runtime = modelFactory.create(request.modelId(), callbacks,
                 request.reasoningEffort(), request.promptCacheKey());
+        AiTokenBudget.requireFits(runtime.model(), request);
         try
         {
             return invoke(runtime, request.messages());

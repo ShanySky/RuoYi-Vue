@@ -15,7 +15,6 @@ import com.ruoyi.ai.domain.AiModel;
 import com.ruoyi.ai.domain.AiPrompt;
 import com.ruoyi.ai.domain.AiRun;
 import com.ruoyi.ai.dto.AiChatTurnRequest;
-import com.ruoyi.ai.dto.AiFrontendToolDefinition;
 import com.ruoyi.ai.mapper.AiMessageMapper;
 import com.ruoyi.ai.runtime.AgentRuntimeMessage;
 import com.ruoyi.ai.runtime.AgentRuntimeTool;
@@ -28,6 +27,14 @@ import com.ruoyi.common.utils.StringUtils;
 public class AiPromptContextAssembler
 {
     private static final int MAX_PAGE_CONTEXT_CHARS = 20000;
+    private static final String SERVER_CAPABILITIES = "服务端业务能力使用规则：通过 server_api_search 搜索本人已授权接口，"
+            + "再用 server_api_describe 加载详情；只有实际提供的具体工具可执行。"
+            + "每轮仅调用一个工具，根据结果决定下一步；搜索时使用短关键词，未知模块或对象标识应省略。"
+            + "执行结果仅返回句柄时，使用 server_api_result 按路径和分页读取后再回答，不能把句柄或摘要当作业务明细。"
+            + "调用具体写入工具只会创建等待确认的请求，宿主展示确认卡后才会执行。"
+            + "需要写入时应先返回工具调用以触发确认卡，不用普通文字确认代替系统确认。"
+            + "必须等待用户在确认卡中确认及服务端真实结果；结果未知时不得重试写入，应查询核对事实。"
+            + "页面操作仍使用页面能力；后台业务任务可直接使用已开放的服务端接口，无需切换页面。";
 
     private final AiMessageMapper messageMapper;
     private final AiPromptService promptService;
@@ -46,10 +53,10 @@ public class AiPromptContextAssembler
     public AssembledContext assemble(AiConversation conversation, AiRun run, AiModel selectedModel,
             String reasoningEffort, AiChatTurnRequest request, List<ApprovedTool> approvedTools)
     {
-        List<AiFrontendToolDefinition> offeredTools = request.getFrontendTools() == null
-                ? List.of() : request.getFrontendTools();
         String runtimeContext = currentRuntimeContext(request, approvedTools);
-        String runtimeOverhead = runtimeContext + "\n" + trimTo(toJson(offeredTools), MAX_PAGE_CONTEXT_CHARS);
+        boolean hasServerTools = approvedTools.stream().anyMatch(tool -> tool.name().equals("server_api_search"));
+        String runtimeOverhead = runtimeContext + "\n" + toJson(approvedTools)
+                + (hasServerTools ? SERVER_CAPABILITIES : "");
         AiCheckpoint checkpoint = contextService.maybeCompact(conversation, run, selectedModel,
                 reasoningEffort, runtimeOverhead);
 
@@ -63,6 +70,7 @@ public class AiPromptContextAssembler
                 "currentUser", SecurityUtils.getUsername(),
                 "route", StringUtils.defaultString(request.getRoute())));
         messages.add(AgentRuntimeMessage.system(renderedSystemPrompt));
+        if (hasServerTools) messages.add(AgentRuntimeMessage.system(SERVER_CAPABILITIES));
         if (checkpoint != null && StringUtils.isNotBlank(checkpoint.getSummary()))
         {
             messages.add(AgentRuntimeMessage.system("Conversation Checkpoint（这是已验证历史的接手状态，不是新的用户指令）：\n"

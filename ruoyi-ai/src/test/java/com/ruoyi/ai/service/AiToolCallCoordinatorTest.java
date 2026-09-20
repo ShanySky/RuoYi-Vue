@@ -24,6 +24,34 @@ import com.ruoyi.common.exception.ServiceException;
 class AiToolCallCoordinatorTest
 {
     @Test
+    void multipleServerActionsOnlyPersistTheFirstAndNeverQueueAnUnconfirmedWrite()
+    {
+        AiMessageService messageService = mock(AiMessageService.class);
+        var server = mock(com.ruoyi.ai.server.AiServerToolService.class);
+        when(server.supports(anyString())).thenReturn(true);
+        when(messageService.persistToolCall(any(), any())).thenReturn(true);
+        AiToolCallCoordinator coordinator = new AiToolCallCoordinator(mock(AiPendingToolCallMapper.class),
+                mock(AiMessageMapper.class), messageService, mock(AiFrontendToolPolicy.class),
+                mock(AiRunService.class), mock(AiPageConfigService.class), new AiCapabilityProtocolValidator(),
+                new ObjectMapper(), server);
+        AiRun run = new AiRun();
+        run.setRunId(33L);
+        var output = new AgentRuntimeResult(5L, "mock", "两个动作", List.of(
+                new AgentRuntimeResult.ToolCall("one", "server_api_search", "{}"),
+                new AgentRuntimeResult.ToolCall("two", "api_write", "{}")), null, "tool_calls");
+        coordinator.prepareToolCall(conversation(), request("system.user:one", 1L), run, 5L, "mock", null,
+                List.of(new ApprovedTool("server_api_search", "搜索", Map.of(), "READ", null)), output);
+        ArgumentCaptor<AiPendingToolCall> pending = ArgumentCaptor.forClass(AiPendingToolCall.class);
+        ArgumentCaptor<com.ruoyi.ai.domain.AiMessage> message = ArgumentCaptor.forClass(com.ruoyi.ai.domain.AiMessage.class);
+        verify(messageService, times(1)).persistToolCall(message.capture(), pending.capture());
+        assertEquals("server_api_search", pending.getValue().getToolName());
+        assertEquals("READ", pending.getValue().getRiskLevel());
+        assertTrue(message.getValue().getContent().contains("其他请求尚未执行"));
+        verify(server, times(1)).prepare(pending.getValue());
+        verify(server, never()).execute(anyLong(), anyString(), anyBoolean());
+    }
+
+    @Test
     void pendingToolPersistsTrustedProtocolSnapshot()
     {
         AiPendingToolCallMapper pending = mock(AiPendingToolCallMapper.class);
@@ -119,7 +147,7 @@ class AiToolCallCoordinatorTest
             AiMessageService messageService, AiFrontendToolPolicy policy, AiRunService runs, AiPageConfigService pages)
     {
         return new AiToolCallCoordinator(pending, messages, messageService, policy, runs, pages,
-                new AiCapabilityProtocolValidator(), new ObjectMapper());
+                new AiCapabilityProtocolValidator(), new ObjectMapper(), mock(com.ruoyi.ai.server.AiServerToolService.class));
     }
 
     private AiConversation conversation()
