@@ -1,6 +1,6 @@
 ---
 name: fullstack-validation
-description: Use when a RuoYi AI change needs real backend, frontend, database, Redis, Agent/Tool Loop, E2E, or temporary public-preview validation. Choose the smallest validation depth that can prove the changed behavior; do not treat build success alone as completion.
+description: Use when a RuoYi AI change needs real backend, frontend, database, Redis, Agent/Tool Loop, E2E, or temporary public-preview validation. Choose the smallest validation depth that can prove the changed behavior, adapt commands to the current execution context, and do not treat build success alone as completion.
 ---
 
 # Fullstack Validation
@@ -8,6 +8,8 @@ description: Use when a RuoYi AI change needs real backend, frontend, database, 
 ## Purpose
 
 Validate RuoYi AI changes with real execution instead of relying only on static inspection.
+
+This Skill defines **what must be proven and how deep validation should go**. It does not authorize changing the task's execution environment. Before using any commands below, follow `.agents/rules/execution-context.md` and adapt the workflow to the current OS, shell, installed capabilities and repository access.
 
 Canonical workflow files currently include:
 
@@ -73,11 +75,14 @@ MySQL
 
 Before running anything:
 
-1. Confirm backend and frontend target branches.
-2. Record both commit SHAs used for acceptance.
-3. Re-read current `pom.xml`, frontend `package.json`, relevant SQL and workflow files.
-4. Check whether the task modifies one or both repositories.
-5. Check whether a workflow pins the other repository to a different branch.
+1. Identify the current execution context and real capabilities: OS / shell, local command execution, Git / remote access, Java / Node, Docker, MySQL / Redis, browser, network, GitHub API / Actions, and whether both repositories are actually accessible.
+2. Confirm backend and frontend target branches or Working Trees that are really being validated.
+3. Record both commit SHAs used for acceptance when those SHAs exist; if validating uncommitted local work, explicitly record that fact instead of inventing a SHA.
+4. Re-read current `pom.xml`, frontend `package.json`, relevant SQL and workflow files.
+5. Check whether the task modifies one or both repositories.
+6. Check whether a workflow pins the other repository to a different branch.
+
+Capability gaps only block the proofs that depend on them. Continue with other valid evidence, and do not switch to another machine / cloud / SSH environment merely because a deeper proof would be possible there.
 
 ### Important paired-branch rule
 
@@ -94,9 +99,11 @@ For cross-repo work, make sure acceptance uses the intended backend/frontend pai
 
 Record the actual SHAs. Never infer branch pairing from a green badge.
 
-## 3. Current baseline commands
+## 3. Current baseline reference commands
 
 Current verified baseline is Java 17 / Spring Boot 4.1.x / Node 20 / MySQL 8 / Redis 7.4.
+
+The commands in this section are reference implementations from currently verified environments. Use equivalent commands that fit the current execution context; do not mechanically run Linux-, Docker- or CI-specific commands on an incompatible local environment.
 
 ### Database initialization
 
@@ -121,12 +128,14 @@ If the change has relevant automated tests, run them instead of using `-DskipTes
 
 ### Backend runtime directories
 
-Current RuoYi logging may require:
+In the currently verified Linux runner, RuoYi logging may require:
 
 ```bash
 sudo mkdir -p /home/ruoyi/logs /home/ruoyi/uploadPath
 sudo chown -R "$USER":"$USER" /home/ruoyi
 ```
+
+This is a Linux-runner reference, not a cross-platform prerequisite. On Windows, macOS, containers or another runtime, inspect the active logging / upload configuration and create or configure equivalent writable paths appropriate to that environment.
 
 A successful build does not prove the JAR can start.
 
@@ -236,11 +245,13 @@ Build success != runtime success.
 
 ### Runner has no `redis-cli`
 
-Do not assume host tools exist. A reusable check is:
+Do not assume host tools exist. On a Linux runner where Docker host networking is available, one reusable check is:
 
 ```bash
 docker run --rm --network host redis:7.4 redis-cli -h 127.0.0.1 ping
 ```
+
+`--network host` is environment-specific. On Docker Desktop / Windows / macOS or another network model, use an equivalent connection method supported by that environment instead of copying this command mechanically.
 
 ### Quick Tunnel returns 403
 

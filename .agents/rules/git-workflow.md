@@ -8,6 +8,8 @@
 
 本规则适用于 RuoYi AI 项目的架构讨论、专项开发、测试修复和主线合并。
 
+本规则定义 Git 语义、安全边界和长期历史要求，不强制某一种操作通道。具体使用本地 Git、GitHub API / Connector、GitHub Actions 或其他合法能力前，先遵守 `.agents/rules/execution-context.md`：以当前执行上下文和真实可用能力选择手段，不因工具存在而自行切换环境。
+
 ## 1. 分支职责
 
 - `master` 是干净基线，日常 AI 开发不要直接落到 master。
@@ -98,48 +100,55 @@
 
 专项实施、架构讨论或临时治理分支在完成使命后，应及时清理；除明确标记为 `archive/*` 或其他长期保留用途的分支外，不长期保留已经完成的工作分支。
 
-优先顺序：
+### 8.1 先按当前能力选择最直接、安全的清理方式
 
-1. 正常实施尽量通过 Pull Request 合入 AI 主线，并在仓库开启“Automatically delete head branches”，由 GitHub 在 PR 合并后自动删除 head branch。
-2. 如果 GitHub Connector 当前没有 `delete_branch` / `delete_ref` 能力，又存在需要主动清理的遗留分支，可以使用**临时 GitHub Actions 清理分支**作为 fallback，不要求用户手工删除。
+在确认工作分支成果已经完整进入目标主线后，按当前执行上下文和真实能力选择方式，不把某一种工具写成所有环境的唯一流程：
 
-使用临时 GitHub Actions 清理时必须遵守：
+1. 如果 PR 合并后仓库已启用 “Automatically delete head branches”，优先让 GitHub 自动删除 head branch。
+2. 当前环境可以安全操作 Git 远端时，可使用标准 Git 方式删除远程分支，例如：
+   ```bash
+   git push origin --delete <目标分支>
+   ```
+3. 当前环境具有 GitHub API / Connector 的 delete ref 能力时，可以直接使用对应原生能力。
+4. 只有在当前主要执行上下文是 GitHub / 云端、又确实缺少直接 delete ref 能力时，才考虑下面的“临时 GitHub Actions” fallback。
+5. 如果以上能力都不存在，只把远程分支清理记录为尚未完成；不要因此把整个已完成实施误判为无法推进，也不要擅自切换到用户本机、SSH 或其他环境。
 
-1. 先确认目标工作分支的有效成果已经完整合入目标主线；未合入、仍需保留或用途不明确的分支禁止删除。
-2. 从当前主线 HEAD 创建临时清理分支，例如 `chatgpt/cleanup-<task>`。
-3. 临时 workflow 只存在于该清理分支，不写入主线；权限只申请：
+无论使用哪种方式，都必须先确认：
 
+- 目标工作分支的有效成果已经完整合入目标主线。
+- 分支不是仍需保留、用途不明确或被其他进行中工作依赖的分支。
+- 清理动作不会绕过分支保护、审批或仓库安全策略。
+
+### 8.2 GitHub / 云端受限场景的临时 Actions fallback
+
+仅当当前执行上下文适合 GitHub Actions、当前可用 GitHub Connector / API 又没有 `delete_branch` / `delete_ref` 能力，且确实需要主动清理遗留分支时，才使用本节。
+
+1. 从当前主线 HEAD 创建临时清理分支，例如 `chatgpt/cleanup-<task>`。
+2. 临时 workflow 只存在于该清理分支，不写入主线；权限只申请：
    ```yaml
    permissions:
      contents: write
    ```
-
-4. Runner 使用自带 `gh` CLI 和当前仓库 `GITHUB_TOKEN` 删除目标 ref：
-
+3. Runner 使用自带 `gh` CLI 和当前仓库 `GITHUB_TOKEN` 删除目标 ref：
    ```yaml
    env:
      GH_TOKEN: ${{ github.token }}
      REPOSITORY: ${{ github.repository }}
    ```
-
    ```bash
-   gh api --method DELETE \\
+   gh api --method DELETE \
      "repos/$REPOSITORY/git/refs/heads/<目标分支>"
    ```
-
-5. 目标分支删除成功后，同一个 workflow 再删除自己的临时清理分支：
-
+4. 目标分支删除成功后，同一个 workflow 再删除自己的临时清理分支：
    ```bash
-   gh api --method DELETE \\
+   gh api --method DELETE \
      "repos/$REPOSITORY/git/refs/heads/<临时清理分支>"
    ```
-
-6. workflow 可监听临时清理分支自身的 push，使创建该 workflow 的提交直接触发执行；不要为了清理分支在主线长期保留专用 workflow。
-7. 执行完成后必须重新查询并确认：
+5. workflow 可监听临时清理分支自身的 push，使创建该 workflow 的提交直接触发执行；不要为了清理分支在主线长期保留专用 workflow。
+6. 执行完成后重新查询并确认：
    - 目标工作分支已不存在；
    - 临时清理分支已不存在；
    - 主线 HEAD 没有因为清理动作发生变化。
-8. 如果仓库或组织策略使 `GITHUB_TOKEN` 实际没有 `contents: write`，应明确报告清理失败，不得假装成功，也不要擅自扩大到更高权限凭据。
+7. 如果仓库或组织策略使 `GITHUB_TOKEN` 实际没有 `contents: write`，明确报告清理失败，不得假装成功，也不要擅自扩大到更高权限凭据。
 
-该 fallback 只用于分支生命周期治理，不用于绕过分支保护、审批或其他仓库安全策略。
-
+该 fallback 是特定 GitHub / 云端能力组合下的 workaround，不是本地 Codex、普通本地 Git 或其他执行环境的默认分支清理方式。
