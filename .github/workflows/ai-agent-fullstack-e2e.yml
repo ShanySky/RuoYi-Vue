@@ -8,6 +8,7 @@ on:
     branches:
       - chatgpt/ai-agent-assistant
       - chatgpt/ai-agent-hardening-phase35-p0
+      - chatgpt/ai-agent-phase35-p1-closure
     paths:
       - '.github/workflows/ai-agent-fullstack-e2e.yml'
       - 'ruoyi-ai/**'
@@ -54,14 +55,14 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ShanySky/RuoYi-Vue3
-          ref: ${{ github.ref_name == 'chatgpt/ai-agent-hardening-phase35-p0' && 'chatgpt/ai-agent-hardening-phase35-p0' || 'chatgpt/ai-agent-assistant' }}
+          ref: ${{ github.ref_name == 'chatgpt/ai-agent-hardening-phase35-p0' && 'chatgpt/ai-agent-hardening-phase35-p0' || github.ref_name == 'chatgpt/ai-agent-phase35-p1-closure' && 'chatgpt/ai-agent-phase35-p1-closure' || 'chatgpt/ai-agent-assistant' }}
           path: frontend
 
       - name: Record acceptance revisions
         run: |
           {
             echo "BACKEND_REF=${{ github.ref_name }}"
-            echo "FRONTEND_REF=${{ github.ref_name == 'chatgpt/ai-agent-hardening-phase35-p0' && 'chatgpt/ai-agent-hardening-phase35-p0' || 'chatgpt/ai-agent-assistant' }}"
+            echo "FRONTEND_REF=${{ github.ref_name == 'chatgpt/ai-agent-hardening-phase35-p0' && 'chatgpt/ai-agent-hardening-phase35-p0' || github.ref_name == 'chatgpt/ai-agent-phase35-p1-closure' && 'chatgpt/ai-agent-phase35-p1-closure' || 'chatgpt/ai-agent-assistant' }}"
             echo "BACKEND_SHA=$(git -C backend rev-parse HEAD)"
             echo "FRONTEND_SHA=$(git -C frontend rev-parse HEAD)"
           } | tee /tmp/acceptance-revisions.txt
