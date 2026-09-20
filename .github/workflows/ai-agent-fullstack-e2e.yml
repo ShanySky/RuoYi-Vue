@@ -1,7 +1,6 @@
 name: AI Agent Fullstack E2E
 
 # Closed-loop acceptance resolves the paired frontend ref from the backend ref at checkout.
-# Settings-boundary branch run also exercises ordinary-user personal settings isolation and browser-loaded persisted model/reasoning preferences.
 # /tmp/acceptance-revisions.txt is the authoritative branch/SHA evidence for each run.
 
 on:
@@ -10,18 +9,12 @@ on:
       - chatgpt/ai-agent-assistant
       - chatgpt/ai-agent-hardening-phase35-p0
       - chatgpt/ai-agent-phase35-p1-closure
-      - chatgpt/ai-settings-boundary-closure
     paths:
       - '.github/workflows/ai-agent-fullstack-e2e.yml'
       - 'ruoyi-ai/**'
       - 'sql/ai_fresh_install.sql'
       - 'sql/ai_migrations/**'
       - 'scripts/ci/**'
-  pull_request:
-    branches:
-      - chatgpt/ai-agent-assistant
-    paths:
-      - '.github/workflows/ai-agent-fullstack-e2e.yml'
   workflow_dispatch:
 
 jobs:
@@ -62,14 +55,14 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ShanySky/RuoYi-Vue3
-          ref: ${{ github.ref_name == 'chatgpt/ai-settings-boundary-closure' && 'chatgpt/ai-settings-boundary-closure' || github.event_name == 'pull_request' && 'chatgpt/ai-settings-boundary-closure' || github.ref_name == 'chatgpt/ai-agent-hardening-phase35-p0' && 'chatgpt/ai-agent-hardening-phase35-p0' || github.ref_name == 'chatgpt/ai-agent-phase35-p1-closure' && 'chatgpt/ai-agent-phase35-p1-closure' || 'chatgpt/ai-agent-assistant' }}
+          ref: ${{ github.ref_name == 'chatgpt/ai-agent-hardening-phase35-p0' && 'chatgpt/ai-agent-hardening-phase35-p0' || github.ref_name == 'chatgpt/ai-agent-phase35-p1-closure' && 'chatgpt/ai-agent-phase35-p1-closure' || 'chatgpt/ai-agent-assistant' }}
           path: frontend
 
       - name: Record acceptance revisions
         run: |
           {
             echo "BACKEND_REF=${{ github.ref_name }}"
-            echo "FRONTEND_REF=${{ github.ref_name == 'chatgpt/ai-settings-boundary-closure' && 'chatgpt/ai-settings-boundary-closure' || github.event_name == 'pull_request' && 'chatgpt/ai-settings-boundary-closure' || github.ref_name == 'chatgpt/ai-agent-hardening-phase35-p0' && 'chatgpt/ai-agent-hardening-phase35-p0' || github.ref_name == 'chatgpt/ai-agent-phase35-p1-closure' && 'chatgpt/ai-agent-phase35-p1-closure' || 'chatgpt/ai-agent-assistant' }}"
+            echo "FRONTEND_REF=${{ github.ref_name == 'chatgpt/ai-agent-hardening-phase35-p0' && 'chatgpt/ai-agent-hardening-phase35-p0' || github.ref_name == 'chatgpt/ai-agent-phase35-p1-closure' && 'chatgpt/ai-agent-phase35-p1-closure' || 'chatgpt/ai-agent-assistant' }}"
             echo "BACKEND_SHA=$(git -C backend rev-parse HEAD)"
             echo "FRONTEND_SHA=$(git -C frontend rev-parse HEAD)"
           } | tee /tmp/acceptance-revisions.txt
@@ -416,14 +409,6 @@ jobs:
       - name: Validate frontend Capability Contract v1
         working-directory: frontend
         run: node tests/ai-capability-contract.test.mjs
-
-      - name: Validate AI settings boundary contract
-        working-directory: frontend
-        run: node tests/ai-settings-boundary.test.mjs
-
-      - name: Build frontend production bundle
-        working-directory: frontend
-        run: npm run build:prod
 
       # Browser acceptance always uses the paired frontend branch selected above.
       - name: Run browser closed-loop acceptance
