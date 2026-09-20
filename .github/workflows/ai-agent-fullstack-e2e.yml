@@ -1,6 +1,7 @@
 name: AI Agent Fullstack E2E
 
 # Closed-loop acceptance resolves the paired frontend ref from the backend ref at checkout.
+# Settings-boundary branch run also exercises ordinary-user personal settings isolation.
 # /tmp/acceptance-revisions.txt is the authoritative branch/SHA evidence for each run.
 
 on:
