@@ -6,6 +6,7 @@ on:
       - chatgpt/ai-agent-assistant
       - chatgpt/ai-agent-hardening-phase35-p0
       - chatgpt/ai-agent-phase35-p1-closure
+      - chatgpt/ai-agent-regression-stability-closure
   workflow_dispatch:
 
 jobs:
