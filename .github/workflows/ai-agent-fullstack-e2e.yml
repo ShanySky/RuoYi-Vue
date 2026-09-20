@@ -164,7 +164,12 @@ jobs:
                   system_text = '\n'.join(str(msg.get('content') or '') for msg in messages if msg.get('role') == 'system')
                   finish = 'stop'
 
-                  # Capability probes are intentionally slower than the default browser API timeout in aggregate.\n                  # This guards the UI from regressing to the generic 10s Axios timeout.\n                  if latest_user == 'Reply with exactly AI_OK.':\n                      time.sleep(1.4)\n\n                  if latest_user == 'Reply with exactly AI_OK.' and body.get('model') == 'mock-agent-model' and body.get('reasoning_effort') == 'minimal':
+                  # Capability probes are intentionally slower than the default browser API timeout in aggregate.
+                  # This guards the UI from regressing to the generic 10s Axios timeout.
+                  if latest_user == 'Reply with exactly AI_OK.':
+                      time.sleep(1.4)
+
+                  if latest_user == 'Reply with exactly AI_OK.' and body.get('model') == 'mock-agent-model' and body.get('reasoning_effort') == 'minimal':
                       self.send_json(400, {'error': {'message': 'Unsupported reasoning_effort: minimal'}})
                       return
 
