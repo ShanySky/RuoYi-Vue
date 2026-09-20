@@ -38,10 +38,12 @@ public class AiServerToolService
     private final ObjectMapper json;
     private final ApiContractSchema schemas;
     private final TransactionTemplate transactions;
+    private final com.ruoyi.ai.service.RunLifecycleService lifecycle;
 
     public AiServerToolService(AiApiAccess access, AiNativeApiInvoker invoker, AiServerCallMapper calls,
             AiPendingToolCallMapper pending, AiRunMapper runs, ObjectMapper json, ApiContractSchema schemas,
-            org.springframework.transaction.PlatformTransactionManager transactionManager)
+            org.springframework.transaction.PlatformTransactionManager transactionManager,
+            com.ruoyi.ai.service.RunLifecycleService lifecycle)
     {
         this.access = access;
         this.invoker = invoker;
@@ -51,6 +53,7 @@ public class AiServerToolService
         this.json = json;
         this.schemas = schemas;
         this.transactions = new TransactionTemplate(transactionManager);
+        this.lifecycle = lifecycle;
     }
 
     public boolean supports(String name)
@@ -148,6 +151,8 @@ public class AiServerToolService
             return;
         }
         boolean nativeStarted = false;
+        Boolean knownWriteSuccess = null;
+        int knownWriteCode = 200;
         try
         {
             JsonNode args = arguments(tool);
@@ -165,9 +170,25 @@ public class AiServerToolService
                 calls.addSource(call.conversationId(), capability.id(), call.authorizationHash());
                 JsonNode result = invoker.invoke(call.callId(), capability, args);
                 nativeStarted = true;
-                if (!call.authorizationHash().equals(access.authorization(capability)))
-                    throw new ServiceException("执行期间业务授权已变化，结果不再披露");
                 boolean success = !result.has("code") || result.path("code").asInt() == 200;
+                if ("WRITE".equals(call.riskLevel()))
+                {
+                    knownWriteSuccess = success;
+                    knownWriteCode = result.path("code").asInt(200);
+                }
+                boolean stillAuthorized;
+                try { stillAuthorized = call.authorizationHash().equals(access.authorization(capability)); }
+                catch (ServiceException denied) { stillAuthorized = false; }
+                if (!stillAuthorized)
+                {
+                    // 已收到原业务完整回执，授权失效不能把已知事实改写为未知。
+                    finish(call, success ? "SUCCEEDED" : "FAILED", null, null,
+                            Map.of("success", success, "result", Map.of("code", result.path("code").asInt(200))),
+                            "AUTHORIZATION_CHANGED_AFTER_EXECUTION");
+                    pending.cancelByRun(call.runId(), "CANCELLED");
+                    lifecycle.tryFail(call.runId(), "AUTHORIZATION_CHANGED_AFTER_EXECUTION");
+                    return;
+                }
                 String resultId = UUID.randomUUID().toString().replace("-", "");
                 Map<String, Object> summary = new LinkedHashMap<>();
                 summary.put("resultId", resultId);
@@ -184,6 +205,15 @@ public class AiServerToolService
         }
         catch (Exception error)
         {
+            if (knownWriteSuccess != null)
+            {
+                finish(call, knownWriteSuccess ? "SUCCEEDED" : "FAILED", null, null,
+                        Map.of("success", knownWriteSuccess, "result", Map.of("code", knownWriteCode)),
+                        "RESULT_NOT_DISCLOSED_AFTER_EXECUTION");
+                pending.cancelByRun(call.runId(), "CANCELLED");
+                lifecycle.tryFail(call.runId(), "RESULT_NOT_DISCLOSED_AFTER_EXECUTION");
+                return;
+            }
             boolean unknown = "WRITE".equals(call.riskLevel())
                     && (nativeStarted || error instanceof AiNativeApiInvoker.UncertainExecutionException);
             String message = unknown ? "业务写入结果未知，禁止重试；请通过查询核对真实结果"
@@ -208,9 +238,14 @@ public class AiServerToolService
         catch (Exception error) { throw new ServiceException("服务端工具结果已失效"); }
     }
 
-    public Map<String, String> outcome(String callId)
+    public Map<String, Object> outcome(String callId)
     {
-        return Map.of("status", owned(callId).status());
+        Call call = owned(callId);
+        boolean changed = "AUTHORIZATION_CHANGED_AFTER_EXECUTION".equals(call.errorCode())
+                || "RESULT_NOT_DISCLOSED_AFTER_EXECUTION".equals(call.errorCode());
+        String notice = changed ? ("SUCCEEDED".equals(call.status()) ? "原业务已确认操作完成。" : "原业务已明确拒绝操作。")
+                + "结果因授权或保存限制无法继续交付，本会话已停止；请新建会话查询，不要重复提交已完成操作。" : "";
+        return Map.of("status", call.status(), "continuationAllowed", !changed, "notice", notice);
     }
 
     private Object search(Call call, JsonNode args)

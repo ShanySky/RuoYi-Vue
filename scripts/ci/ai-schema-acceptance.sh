@@ -13,11 +13,11 @@ UPGRADE_DB="${AI_CI_UPGRADE_DB:-ry_ai_upgrade_acceptance}"
 [[ "$FRESH_DB" != "$UPGRADE_DB" ]]
 
 mysql_server() {
-  mysql -h"$DB_HOST" -u"$DB_USER" -p"$DB_PASSWORD" "$@"
+  MYSQL_PWD="$DB_PASSWORD" mysql -h"$DB_HOST" -u"$DB_USER" "$@"
 }
 mysql_db() {
   local db="$1"; shift
-  mysql -h"$DB_HOST" -u"$DB_USER" -p"$DB_PASSWORD" "$db" "$@"
+  MYSQL_PWD="$DB_PASSWORD" mysql -h"$DB_HOST" -u"$DB_USER" "$db" "$@"
 }
 cleanup() {
   mysql_server -e "drop database if exists \`$FRESH_DB\`; drop database if exists \`$UPGRADE_DB\`;" >/dev/null
@@ -60,6 +60,14 @@ for db in "$FRESH_DB" "$UPGRADE_DB"; do
   test "$(mysql_db "$db" -Nse "select count(*) from ai_server_result_guard where guard_id=1;")" = 1
   test "$(mysql_db "$db" -Nse "select count(*) from ai_api_policy where enabled=1;")" = 0
   test "$(mysql_db "$db" -Nse "select count(*) from sys_menu where perms in ('ai:api:view','ai:api:edit');")" = 3
+  test "$(mysql_db "$db" -Nse "select count(*) from ai_scope_revision where guard_id=1;")" = 1
+  test "$(mysql_db "$db" -Nse "select count(*) from ai_scope_trigger_manifest m join information_schema.triggers t on t.trigger_schema=database() and t.trigger_name=m.trigger_name and t.event_object_table=m.table_name and t.event_manipulation=m.event_name and t.action_timing='AFTER' and sha2(t.action_statement,256)=m.action_hash;")" = 6
+  # 归属版本随原事务回滚，提交后才使旧授权失效。
+  before_scope=$(mysql_db "$db" -Nse "select revision from ai_scope_revision where guard_id=1;")
+  mysql_db "$db" -e "start transaction; update sys_user set dept_id=104 where user_id=2; rollback;"
+  test "$(mysql_db "$db" -Nse "select revision from ai_scope_revision where guard_id=1;")" = "$before_scope"
+  mysql_db "$db" -e "update sys_user set dept_id=104 where user_id=2;"
+  test "$(mysql_db "$db" -Nse "select revision from ai_scope_revision where guard_id=1;")" -gt "$before_scope"
 done
 
 test "$(mysql_db "$UPGRADE_DB" -Nse "select status from ai_pending_tool_call where call_id='legacy-pending';")" = "EXPIRED"

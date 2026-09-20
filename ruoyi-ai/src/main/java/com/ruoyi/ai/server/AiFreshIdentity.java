@@ -84,6 +84,12 @@ public class AiFreshIdentity
         facts.put("roles", roles);
         facts.put("roleDepartments", scope.roleDepartments(user.getUserId()));
         facts.put("departmentHierarchy", scope.departmentHierarchy());
+        if (!user.getUser().isAdmin())
+        {
+            Long revision = scope.scopeRevision();
+            if (revision == null) throw new ServiceException("数据归属授权保护不可用，暂不能读取业务结果");
+            facts.put("scopeRevision", revision);
+        }
         try { return AiApiCatalog.hash(json.writeValueAsString(facts)); }
         catch (Exception error) { throw new ServiceException("无法核对当前业务授权"); }
     }

@@ -117,16 +117,28 @@ def schema_acceptance():
                 with sftp.file(destination, "w") as stream:
                     stream.write(source.read_text(encoding="utf-8-sig"))
             with sftp.file(remote + "/bin/mysql", "w") as stream:
-                stream.write('#!/bin/sh\nexec sudo docker exec -i ai-evo-mysql mysql "$@"\n')
+                stream.write('#!/bin/sh\nexec sudo --preserve-env=MYSQL_PWD docker exec -i -e MYSQL_PWD ai-evo-mysql mysql "$@"\n')
             sftp.chmod(remote + "/bin/mysql", 0o700)
         run(client, f"cd {remote} && set -a && . /home/ruoyitest/mysql.env && "
                     'export AI_CI_DB_PASSWORD="$MYSQL_ROOT_PASSWORD" && '
                     f'PATH="{remote}/bin:$PATH" bash scripts/ci/ai-schema-acceptance.sh')
 
 
+def migrate():
+    # 只处理本任务的实施库；逐个有序执行，迁移自身负责可重入。
+    with pymysql.connect(host="127.0.0.1", port=13392, user="root", password=credentials()["mysql"],
+                         database="ruoyi_ai_evolution", charset="utf8mb4", autocommit=True,
+                         client_flag=pymysql.constants.CLIENT.MULTI_STATEMENTS) as connection, connection.cursor() as cursor:
+        for path in sorted((ROOT / "sql/ai_migrations").glob("20260921_*.sql")):
+            cursor.execute(path.read_text(encoding="utf-8-sig"))
+            while cursor.nextset():
+                pass
+            print("已应用任务库迁移：" + path.name, flush=True)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("provision", "services", "seed", "schema"))
+    parser.add_argument("action", choices=("provision", "services", "seed", "schema", "migrate"))
     parser.add_argument("--database", default="ruoyi_ai_evolution")
     parser.add_argument("--revision")
     args = parser.parse_args()
@@ -134,5 +146,7 @@ if __name__ == "__main__":
         provision(args.action == "provision")
     elif args.action == "schema":
         schema_acceptance()
+    elif args.action == "migrate":
+        migrate()
     else:
         seed(args.database, args.revision)
