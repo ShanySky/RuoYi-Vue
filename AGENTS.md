@@ -47,7 +47,36 @@
 
 仓库当前代码、配置、SQL、测试、workflow 和真实运行结果始终是实现状态的最终事实来源。
 
-## 4. 当前后端主干
+## 4. 五套运行环境
+
+后端统一使用 `local`、`dev`、`ci`、`test`、`prod` 五个 Maven Profile 和同名 Spring Profile：
+
+| 环境 | 配置文件 | 用途 | 版本控制 |
+| --- | --- | --- | --- |
+| `local` | `ruoyi-admin/src/main/resources/application-local.yml` | 开发者本机联调 | 被 `.gitignore` 精确忽略 |
+| `dev` | `ruoyi-admin/src/main/resources/application-dev.yml` | 共享开发环境 | 跟踪 |
+| `ci` | `ruoyi-admin/src/main/resources/application-ci.yml` | GitHub Actions、自动化测试和临时预览 | 跟踪 |
+| `test` | `ruoyi-admin/src/main/resources/application-test.yml` | 测试环境 | 跟踪 |
+| `prod` | `ruoyi-admin/src/main/resources/application-prod.yml` | 正式环境 | 跟踪 |
+
+构建和运行示例中的 `<env>` 必须替换为上述五个环境之一：
+
+```powershell
+mvn -P<env> -DskipTests clean package
+java -jar ruoyi-admin/target/ruoyi-admin.jar --spring.profiles.active=<env>
+```
+
+使用和维护时遵守以下约束：
+
+- 项目要求 Java 17。执行 Maven、测试或启动前先确认 `java -version` 与 `mvn -version` 实际使用 Java 17；不要依赖机器全局默认版本。
+- 未指定环境时，Maven 与 Spring 默认选择 `local`。非本机运行必须同时明确 Maven 的 `-P<env>` 和运行时的 `--spring.profiles.active=<env>`，避免构建环境与启动环境不一致。
+- 本机 `local` 当前依赖 `127.0.0.1:3306` 的 MySQL、数据库 `ruoyi_ai`，以及 `127.0.0.1:6379` 的 Redis；账号和密码只从被忽略的本地配置读取，不写入本文档。
+- `dev`、`test`、`prod` 当前保留了环境拆分时的初始连接配置；部署前必须核对并更新对应文件，不能因文件名正确就推断目标服务地址正确。GitHub Actions 固定使用 `ci`。
+- Druid 公共连接池配置已经归并到基础 `application.yml`，环境文件只维护数据库、Redis 等差异；不要恢复 `application-druid.yml` 或 `spring.profiles.include: druid`。
+- 前端必须选择同名环境。本机联调配套前端执行 `npm run dev:local`，持续集成配套前端执行 `npm run dev:ci` 或 `npm run build:ci`。
+- 新库初始化顺序是 `sql/ry_20260417.sql`、`sql/quartz.sql`、`sql/ai_fresh_install.sql`；`sql/ai_fresh_install.sql` 已包含新装所需 AI 结构，不要再叠加旧库升级脚本。
+
+## 5. 当前后端主干
 
 AI 后端能力集中在 `ruoyi-ai`，核心边界包括：
 
@@ -62,7 +91,7 @@ AI 后端能力集中在 `ruoyi-ai`，核心边界包括：
 
 如果实现与已确认设计冲突，应明确指出并处理，而不是静默选择其中一份。
 
-## 5. Rule / Skill 的门槛
+## 6. Rule / Skill 的门槛
 
 只有稳定、重复的真实开发场景才新增 Rule 或 Skill：
 
