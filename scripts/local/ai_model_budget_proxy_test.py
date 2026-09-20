@@ -74,6 +74,24 @@ class BudgetTest(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             Budget(self.path).begin_validation()
 
+    def test_stage_cannot_be_changed_to_reset_existing_ledger(self):
+        self.budget.reserve("POST", "/chat/completions", self.request(1))
+        before = self.path.read_bytes()
+        with self.assertRaises(RuntimeError):
+            Budget(self.path, stage="DB-2")
+        self.assertEqual(before, self.path.read_bytes())
+
+    def test_data_stage_has_its_own_lower_persistent_budget(self):
+        budget = Budget(self.folder / "data.json", stage="DB-2")
+        self.assertEqual(180000, budget.limits["inputTokens"])
+        self.assertEqual(32, budget.limits["requests"])
+        for index in range(10):
+            entry = budget.reserve("POST", "/chat/completions", self.request(index))
+            budget.settle(entry, 200, 0.1, {"usage": {"prompt_tokens": 10, "completion_tokens": 10},
+                "choices": [{"message": {"tool_calls": [{"id": str(index)}]}}]})
+        with self.assertRaises(RuntimeError):
+            Budget(budget.path, stage="DB-2").reserve("POST", "/chat/completions", self.request(11))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -29,6 +29,8 @@ public class AiPromptContextAssembler
     private static final int MAX_PAGE_CONTEXT_CHARS = 20000;
     private static final String SERVER_CAPABILITIES = "服务端业务能力使用规则：通过 server_api_search 搜索本人已授权接口，"
             + "再用 server_api_describe 加载详情；只有实际提供的具体工具可执行。"
+            + "数据筛选、关联和分组统计可用 server_data_search 搜索业务视图，再用 server_data_describe 加载允许字段与查询工具；"
+            + "只提交工具模式允许的结构化只读参数，不提交 SQL。统计结果仅覆盖本人当前业务数据范围。"
             + "每轮仅调用一个工具，根据结果决定下一步；搜索时使用短关键词，未知模块或对象标识应省略。"
             + "执行结果仅返回句柄时，使用 server_api_result 按路径和分页读取后再回答，不能把句柄或摘要当作业务明细。"
             + "调用具体写入工具只会创建等待确认的请求，宿主展示确认卡后才会执行。"

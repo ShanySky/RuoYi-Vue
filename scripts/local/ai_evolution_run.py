@@ -9,6 +9,9 @@ import subprocess
 import shutil
 import hashlib
 import re
+import time
+import requests
+from zipfile import ZipFile
 
 from ai_evolution_vm import EVIDENCE
 from ai_evolution_stack import credentials
@@ -59,6 +62,10 @@ def start(kind, baseline, regression=False, regression_db=None):
         jar = EVIDENCE / "stage1-baseline/ruoyi-admin-8c820632.jar" if baseline else folder / f"ruoyi-admin-{stamp}.jar"
         if not baseline:
             shutil.copy2(BACKEND / "ruoyi-admin/target/ruoyi-admin.jar", jar)
+        with ZipFile(jar) as package:
+            manifest = package.read("META-INF/MANIFEST.MF").decode("utf-8")
+            if "Main-Class: org.springframework.boot.loader.launch.JarLauncher" not in manifest:
+                raise RuntimeError("构建包尚未完成 Spring 重打包，不启动半成品；请先等待构建结束")
         command = [str(JAVA), "-Dfile.encoding=UTF-8", "-Xmx1536m", "-jar", str(jar),
                    "--spring.profiles.active=ci", f"--logging.config={logging_path.as_uri()}"]
         directory = BACKEND
@@ -87,6 +94,19 @@ def start(kind, baseline, regression=False, regression_db=None):
         record.update({"jar": str(jar), "sha256": hashlib.sha256(jar.read_bytes()).hexdigest(), "database": database})
     (folder / f"{kind}-{stamp}.json").write_text(json.dumps(record), encoding="utf-8")
     print(json.dumps(record))
+    if kind == "backend":
+        deadline = time.monotonic() + 60
+        while time.monotonic() < deadline:
+            if process.poll() is not None:
+                raise RuntimeError("后端启动期间退出，请核查刚记录的双流日志")
+            try:
+                if requests.get(f"http://127.0.0.1:{backend_port}/captchaImage", timeout=2).status_code == 200:
+                    print("任务后端已就绪：" + str(backend_port), flush=True)
+                    return
+            except requests.RequestException:
+                pass
+            time.sleep(1)
+        raise RuntimeError("后端在 60 秒内未就绪，请核查启动记录，不继续验收")
 
 
 if __name__ == "__main__":

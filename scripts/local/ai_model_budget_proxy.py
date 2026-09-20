@@ -21,6 +21,11 @@ LOCK = threading.Lock()
 MODEL = "gpt-5.6-luna"
 LIMITS = {"requests": 48, "inputTokens": 300000, "outputTokens": 40000,
           "toolRounds": 40, "retries": 2, "upstreamSeconds": 1800, "wallSeconds": 3600}
+STAGES = {
+    "API-1": ("stage1", LIMITS, 12),
+    "DB-2": ("stage2", {"requests": 32, "inputTokens": 180000, "outputTokens": 24000,
+        "toolRounds": 24, "retries": 3, "upstreamSeconds": 1200, "wallSeconds": 3600}, 10),
+}
 
 
 def setting(name):
@@ -34,11 +39,16 @@ def setting(name):
 
 
 class Budget:
-    def __init__(self, path=LEDGER_PATH):
-        self.path = path
-        self.state = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {
-            "stage": "API-1", "limits": LIMITS, "startedAt": None, "entries": []}
-        if self.state["limits"] != LIMITS:
+    def __init__(self, path=None, stage="API-1"):
+        if stage not in STAGES:
+            raise RuntimeError("尚未确定该阶段模型预算")
+        suffix, self.limits, self.task_limit = STAGES[stage]
+        self.path = path or EVIDENCE / ("model-budget-" + suffix + ".json")
+        self.trace_path = EVIDENCE / ("model-inputs-" + suffix + ".jsonl")
+        self.output_path = EVIDENCE / ("model-outputs-" + suffix + ".jsonl")
+        self.state = json.loads(self.path.read_text(encoding="utf-8")) if self.path.exists() else {
+            "stage": stage, "limits": self.limits, "startedAt": None, "entries": []}
+        if self.state["limits"] != self.limits or self.state["stage"] != stage:
             raise RuntimeError("预算文件上限与已审核阶段预算不一致，禁止自动重置")
 
     def save(self):
@@ -56,7 +66,7 @@ class Budget:
     def begin_validation(self):
         prior = self.state.get("validationAttempts", 1 if self.state["entries"] else 0)
         retries = prior
-        if retries + sum(entry["retry"] for entry in self.state["entries"]) > LIMITS["retries"]:
+        if retries + sum(entry["retry"] for entry in self.state["entries"]) > self.limits["retries"]:
             raise RuntimeError("本阶段真实验收重试预算已用尽，禁止重新开批次")
         self.state["validationAttempts"] = prior + 1
         self.state["validationRetries"] = retries
@@ -66,7 +76,7 @@ class Budget:
         entries = self.state["entries"]
         now = time.time()
         started = self.state["startedAt"]
-        if started is not None and now - started >= LIMITS["wallSeconds"]:
+        if started is not None and now - started >= self.limits["wallSeconds"]:
             raise RuntimeError("本阶段真实模型验收墙钟预算已用尽")
         canonical = {key: value for key, value in body.items() if key != "prompt_cache_key"}
         encoded = json.dumps(canonical, ensure_ascii=False, sort_keys=True).encode("utf-8")
@@ -86,10 +96,10 @@ class Budget:
                              + self.state.get("validationRetries", 0),
                   "upstreamSeconds": sum(entry["upstreamSeconds"] for entry in entries) + 120}
         for name, value in checks.items():
-            if value > LIMITS[name] or (name == "toolRounds" and value >= LIMITS[name]):
+            if value > self.limits[name] or (name == "toolRounds" and value >= self.limits[name]):
                 raise RuntimeError("本阶段累计预算不足：" + name)
-        if sum(entry["toolRounds"] for entry in entries if entry["task"] == task) >= 12:
-            raise RuntimeError("单任务工具轮次已达 12")
+        if sum(entry["toolRounds"] for entry in entries if entry["task"] == task) >= self.task_limit:
+            raise RuntimeError("单任务工具轮次已达 " + str(self.task_limit))
         entry = {"id": len(entries) + 1, "task": task, "fingerprint": fingerprint, "retry": int(retry),
                  "startedAt": datetime.now(timezone.utc).isoformat(), "method": method, "path": path,
                  "inputTokens": input_reserve, "outputTokens": output_reserve,
@@ -163,7 +173,7 @@ class Proxy(BaseHTTPRequestHandler):
             except RuntimeError as error:
                 self.send(429, {"error": {"message": str(error)}})
                 return
-            with TRACE_PATH.open("a", encoding="utf-8") as stream:
+            with self.budget.trace_path.open("a", encoding="utf-8") as stream:
                 stream.write(json.dumps({"requestId": entry["id"], "body": body}, ensure_ascii=False) + "\n")
         started = time.monotonic()
         status, response = 502, {}
@@ -184,7 +194,7 @@ class Proxy(BaseHTTPRequestHandler):
             with LOCK:
                 self.budget.settle(entry, status, time.monotonic() - started, response)
                 if status == 200:
-                    with OUTPUT_PATH.open("a", encoding="utf-8") as stream:
+                    with self.budget.output_path.open("a", encoding="utf-8") as stream:
                         stream.write(json.dumps({"requestId": entry["id"], "response": response}, ensure_ascii=False) + "\n")
         self.send(status, output)
 

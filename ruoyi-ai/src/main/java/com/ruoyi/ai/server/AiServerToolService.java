@@ -13,6 +13,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.ruoyi.ai.domain.AiPendingToolCall;
 import com.ruoyi.ai.domain.AiRun;
+import com.ruoyi.ai.data.AiDataTools;
 import com.ruoyi.ai.mapper.AiPendingToolCallMapper;
 import com.ruoyi.ai.mapper.AiRunMapper;
 import com.ruoyi.ai.mapper.AiServerCallMapper;
@@ -39,11 +40,13 @@ public class AiServerToolService
     private final ApiContractSchema schemas;
     private final TransactionTemplate transactions;
     private final com.ruoyi.ai.service.RunLifecycleService lifecycle;
+    private final AiDataTools data;
+    private final AiBusinessAccess business;
 
     public AiServerToolService(AiApiAccess access, AiNativeApiInvoker invoker, AiServerCallMapper calls,
             AiPendingToolCallMapper pending, AiRunMapper runs, ObjectMapper json, ApiContractSchema schemas,
             org.springframework.transaction.PlatformTransactionManager transactionManager,
-            com.ruoyi.ai.service.RunLifecycleService lifecycle)
+            com.ruoyi.ai.service.RunLifecycleService lifecycle, AiDataTools data, AiBusinessAccess business)
     {
         this.access = access;
         this.invoker = invoker;
@@ -54,12 +57,14 @@ public class AiServerToolService
         this.schemas = schemas;
         this.transactions = new TransactionTemplate(transactionManager);
         this.lifecycle = lifecycle;
+        this.data = data;
+        this.business = business;
     }
 
     public boolean supports(String name)
     {
         return SEARCH.equals(name) || DESCRIBE.equals(name) || RESULT.equals(name)
-                || (name != null && name.matches("api_[a-f0-9]{24}"));
+                || (name != null && name.matches("api_[a-f0-9]{24}")) || data.supports(name);
     }
 
     public List<ApprovedTool> definitions(AiRun run)
@@ -83,10 +88,16 @@ public class AiServerToolService
         ApiContractSchema.add(result, "offset", Map.of("type", "integer", "minimum", 0, "maximum", 100000), false);
         ApiContractSchema.add(result, "limit", Map.of("type", "integer", "minimum", 1, "maximum", 50), false);
         definitions.add(tool(RESULT, "读取本任务结果句柄。支持 JSON 路径（例如 /rows）、数组偏移和条数；每次最多 8 KiB。", result));
+        definitions.addAll(data.discovery());
         for (var loaded : calls.loaded(run.getRunId()))
         {
             try
             {
+                if (loaded.capabilityId().startsWith("data_"))
+                {
+                    definitions.add(data.definition(loaded.capabilityId(), loaded.contractHash()));
+                    continue;
+                }
                 Capability capability = access.require(loaded.capabilityId());
                 if (capability.fingerprint().equals(loaded.contractHash()))
                     definitions.add(new ApprovedTool(capability.id(), capability.title() + "；" + capability.method()
@@ -110,7 +121,8 @@ public class AiServerToolService
         ApprovedTool definition = definitions(run).stream().filter(value -> value.name().equals(tool.getToolName()))
                 .findFirst().orElseThrow(this::denied);
         JsonNode args = arguments(tool);
-        schemas.validate(definition.inputSchema(), args);
+        // 写入确认前必须验证；只读参数错误在执行阶段作为工具结果返回，允许模型修正。
+        if ("WRITE".equals(definition.riskLevel())) schemas.validate(definition.inputSchema(), args);
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("callId", tool.getCallId());
         values.put("conversationId", tool.getConversationId());
@@ -118,7 +130,12 @@ public class AiServerToolService
         values.put("userId", tool.getUserId());
         values.put("toolName", tool.getToolName());
         values.put("riskLevel", definition.riskLevel());
-        if (tool.getToolName().startsWith("api_"))
+        if (tool.getToolName().startsWith("data_"))
+        {
+            values.put("capabilityId", tool.getToolName());
+            values.put("authorizationHash", data.authorization(tool.getToolName()));
+        }
+        else if (tool.getToolName().startsWith("api_"))
         {
             Capability capability = access.require(tool.getToolName());
             values.put("capabilityId", capability.id());
@@ -156,19 +173,29 @@ public class AiServerToolService
         try
         {
             JsonNode args = arguments(tool);
+            ApprovedTool definition = definitions(runs.selectById(call.runId())).stream()
+                    .filter(value -> value.name().equals(call.toolName())).findFirst().orElseThrow(this::denied);
+            schemas.validate(definition.inputSchema(), args);
             Object output;
             if (SEARCH.equals(call.toolName())) output = search(call, args);
             else if (DESCRIBE.equals(call.toolName())) output = describe(call, args);
             else if (RESULT.equals(call.toolName())) output = readResult(call, args);
+            else if (AiDataTools.SEARCH.equals(call.toolName()) || AiDataTools.DESCRIBE.equals(call.toolName()))
+                output = data.discovery(call, args);
             else
             {
-                Capability capability = access.require(call.capabilityId());
-                if (!call.authorizationHash().equals(access.authorization(capability)))
+                if (!call.authorizationHash().equals(business.authorization(call.capabilityId())))
                     throw new ServiceException("业务授权或接口策略已变化");
-                schemas.validate(capability.inputSchema(), args);
                 // 在任何业务内容进入会话前记录来源，使后续历史与检查点也受同一授权约束。
-                calls.addSource(call.conversationId(), capability.id(), call.authorizationHash());
-                JsonNode result = invoker.invoke(call.callId(), capability, args);
+                calls.addSource(call.conversationId(), call.capabilityId(), call.authorizationHash());
+                JsonNode result;
+                if (call.capabilityId().startsWith("data_")) result = data.execute(call, args);
+                else
+                {
+                    Capability capability = access.require(call.capabilityId());
+                    schemas.validate(capability.inputSchema(), args);
+                    result = invoker.invoke(call.callId(), capability, args);
+                }
                 nativeStarted = true;
                 boolean success = !result.has("code") || result.path("code").asInt() == 200;
                 if ("WRITE".equals(call.riskLevel()))
@@ -177,7 +204,7 @@ public class AiServerToolService
                     knownWriteCode = result.path("code").asInt(200);
                 }
                 boolean stillAuthorized;
-                try { stillAuthorized = call.authorizationHash().equals(access.authorization(capability)); }
+                try { stillAuthorized = call.authorizationHash().equals(business.authorization(call.capabilityId())); }
                 catch (ServiceException denied) { stillAuthorized = false; }
                 if (!stillAuthorized)
                 {
@@ -231,8 +258,7 @@ public class AiServerToolService
             throw new ServiceException("服务端尚未完成该调用，不能提交浏览器结果");
         if (call.capabilityId() != null && "SUCCEEDED".equals(call.status()))
         {
-            Capability capability = access.require(call.capabilityId());
-            if (!call.authorizationHash().equals(access.authorization(capability))) throw denied();
+            if (!call.authorizationHash().equals(business.authorization(call.capabilityId()))) throw denied();
         }
         try { return json.readTree(call.toolResultJson()); }
         catch (Exception error) { throw new ServiceException("服务端工具结果已失效"); }
@@ -296,8 +322,7 @@ public class AiServerToolService
     {
         Call source = calls.result(args.path("resultId").asText());
         if (source == null || !source.userId().equals(reader.userId()) || !source.runId().equals(reader.runId())) throw denied();
-        Capability capability = access.require(source.capabilityId());
-        if (!source.authorizationHash().equals(access.authorization(capability))) throw denied();
+        if (!source.authorizationHash().equals(business.authorization(source.capabilityId()))) throw denied();
         try
         {
             JsonNode root = json.readTree(source.resultJson());

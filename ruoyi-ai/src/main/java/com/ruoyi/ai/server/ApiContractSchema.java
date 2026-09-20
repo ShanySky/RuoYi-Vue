@@ -264,6 +264,8 @@ public class ApiContractSchema
             }
             case "array" -> {
                 if (!value.isArray() || value.size() > 50) fail(location);
+                if (schema.get("maxItems") instanceof Number max && value.size() > max.intValue()) fail(location);
+                if (schema.get("minItems") instanceof Number min && value.size() < min.intValue()) fail(location);
                 for (JsonNode item : value) validate(cast(schema.get("items")), item, location, depth + 1);
             }
             case "string" -> {

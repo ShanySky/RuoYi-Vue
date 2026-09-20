@@ -59,6 +59,8 @@ for db in "$FRESH_DB" "$UPGRADE_DB"; do
   test "$(mysql_db "$db" -Nse "select count(*) from ai_page_config where route='/system/user' and enabled='0';")" = 1
   test "$(mysql_db "$db" -Nse "select count(*) from ai_server_result_guard where guard_id=1;")" = 1
   test "$(mysql_db "$db" -Nse "select count(*) from ai_api_policy where enabled=1;")" = 0
+  test "$(mysql_db "$db" -Nse "select count(*) from ai_data_policy where enabled=1;")" = 0
+  test "$(mysql_db "$db" -Nse "select count(*) from sys_menu where perms in ('ai:data:view','ai:data:edit');")" = 3
   test "$(mysql_db "$db" -Nse "select count(*) from sys_menu where perms in ('ai:api:view','ai:api:edit');")" = 3
   test "$(mysql_db "$db" -Nse "select count(*) from ai_scope_revision where guard_id=1;")" = 1
   test "$(mysql_db "$db" -Nse "select count(*) from ai_scope_trigger_manifest m join information_schema.triggers t on t.trigger_schema=database() and t.trigger_name=m.trigger_name and t.event_object_table=m.table_name and t.event_manipulation=m.event_name and t.action_timing='AFTER' and sha2(t.action_statement,256)=m.action_hash;")" = 6

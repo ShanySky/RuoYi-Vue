@@ -1,6 +1,7 @@
 """记录配对工作树与权威文档版本，只写文件哈希，不复制凭据或运行数据。"""
 
 from datetime import datetime
+import argparse
 import hashlib
 import json
 from pathlib import Path
@@ -17,7 +18,10 @@ def git(root, *arguments):
     return subprocess.check_output(["git", *arguments], cwd=root).decode("utf-8").strip()
 
 
-manifest = {"phase": "API-1", "createdAt": datetime.now().isoformat(), "repositories": {}}
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("--stage", choices=("stage1", "stage2", "stage3", "overall"), default="stage1")
+args = parser.parse_args()
+manifest = {"phase": args.stage, "createdAt": datetime.now().isoformat(), "repositories": {}}
 for name, root in ROOTS.items():
     changed = set(git(root, "ls-files", "-z", "--modified", "--others", "--exclude-standard").split("\0")) - {""}
     files = {}
@@ -34,7 +38,7 @@ for name, root in ROOTS.items():
     manifest["repositories"][name] = {"path": str(root), "branch": git(root, "branch", "--show-current"),
         "head": git(root, "rev-parse", "HEAD"), "uncommittedFiles": files,
         "diffSha256": hashlib.sha256(subprocess.check_output(["git", "diff", "--binary", "HEAD"], cwd=root)).hexdigest()}
-path = EVIDENCE / ("stage1-versions-" + datetime.now().strftime("%Y%m%d-%H%M%S") + ".json")
+path = EVIDENCE / (args.stage + "-versions-" + datetime.now().strftime("%Y%m%d-%H%M%S") + ".json")
 path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
 print(json.dumps({"manifest": str(path), "changedFiles": {name: len(value["uncommittedFiles"])
     for name, value in manifest["repositories"].items()}}, ensure_ascii=False))

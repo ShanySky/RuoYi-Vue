@@ -9,9 +9,9 @@ import com.ruoyi.common.exception.ServiceException;
 public class AiBusinessHistoryGuard
 {
     private final AiServerCallMapper calls;
-    private final AiApiAccess access;
+    private final AiBusinessAccess access;
 
-    public AiBusinessHistoryGuard(AiServerCallMapper calls, AiApiAccess access)
+    public AiBusinessHistoryGuard(AiServerCallMapper calls, AiBusinessAccess access)
     {
         this.calls = calls;
         this.access = access;
@@ -28,8 +28,7 @@ public class AiBusinessHistoryGuard
         {
             try
             {
-                var capability = access.require(source.capabilityId());
-                if (!source.authorizationHash().equals(access.authorization(capability))) throw new ServiceException("");
+                if (!source.authorizationHash().equals(access.authorization(source.capabilityId()))) throw new ServiceException("");
             }
             catch (ServiceException error)
             {
