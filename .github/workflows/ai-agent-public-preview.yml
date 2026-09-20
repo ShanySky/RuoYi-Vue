@@ -6,7 +6,6 @@ on:
   push:
     branches:
       - chatgpt/ai-agent-assistant
-      - chatgpt/ai-agent-regression-stability-closure
     paths:
       - '.github/workflows/ai-agent-public-preview.yml'
   workflow_dispatch:
@@ -49,7 +48,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ShanySky/RuoYi-Vue3
-          ref: ${{ github.ref_name == 'chatgpt/ai-agent-regression-stability-closure' && 'chatgpt/ai-agent-regression-stability-closure' || 'chatgpt/ai-agent-assistant' }}
+          ref: chatgpt/ai-agent-assistant
           path: frontend
 
       - name: Record preview revisions
