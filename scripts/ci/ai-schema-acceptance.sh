@@ -77,4 +77,14 @@ where table_schema='$UPGRADE_DB' and left(table_name,3)='ai_'
 order by table_name,index_name,seq_in_index;" > /tmp/ai-upgrade-indexes.txt
 diff -u /tmp/ai-fresh-indexes.txt /tmp/ai-upgrade-indexes.txt
 
+
+# Workflow schema-entry guards: ephemeral fresh databases must use the canonical
+# current schema instead of composing historical baselines without migrations.
+# Historical SQL names are still expected above in this script for upgrade-path testing.
+grep -q "backend/sql/ai_fresh_install.sql" .github/workflows/ai-agent-public-preview.yml
+! grep -q "backend/sql/ai_20260918.sql" .github/workflows/ai-agent-public-preview.yml
+! grep -q "backend/sql/ai_hardening_b1_b3_20260919.sql" .github/workflows/ai-agent-public-preview.yml
+grep -q "sql/ai_fresh_install.sql" .github/workflows/ai-agent-real-gpt.yml
+! grep -q "sql/ai_20260918.sql" .github/workflows/ai-agent-real-gpt.yml
+
 echo "AI_SCHEMA_ACCEPTANCE_OK"

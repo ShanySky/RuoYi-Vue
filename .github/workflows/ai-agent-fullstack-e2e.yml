@@ -62,7 +62,7 @@ jobs:
         run: |
           {
             echo "BACKEND_REF=${{ github.ref_name }}"
-            echo "FRONTEND_REF=${{ github.ref_name == 'chatgpt/ai-agent-hardening-phase35-p0' && 'chatgpt/ai-agent-hardening-phase35-p0' || github.ref_name == 'chatgpt/ai-agent-phase35-p1-closure' && 'chatgpt/ai-agent-phase35-p1-closure' || 'chatgpt/ai-agent-assistant' }}"
+            echo "FRONTEND_REF=${{ github.ref_name == 'chatgpt/ai-agent-hardening-phase35-p0' && 'chatgpt/ai-agent-hardening-phase35-p0' || github.ref_name == 'chatgpt/ai-agent-phase35-p1-closure' && 'chatgpt/ai-agent-phase35-p1-closure' || github.ref_name == 'chatgpt/ai-agent-regression-stability-closure' && 'chatgpt/ai-agent-regression-stability-closure' || 'chatgpt/ai-agent-assistant' }}"
             echo "BACKEND_SHA=$(git -C backend rev-parse HEAD)"
             echo "FRONTEND_SHA=$(git -C frontend rev-parse HEAD)"
           } | tee /tmp/acceptance-revisions.txt
@@ -163,6 +163,11 @@ jobs:
                   system_text = '\n'.join(str(msg.get('content') or '') for msg in messages if msg.get('role') == 'system')
                   finish = 'stop'
 
+                  # Capability probes are intentionally slower than the default browser API timeout in aggregate.
+                  # This guards the UI from regressing to the generic 10s Axios timeout.
+                  if latest_user == 'Reply with exactly AI_OK.':
+                      time.sleep(1.4)
+
                   if latest_user == 'Reply with exactly AI_OK.' and body.get('model') == 'mock-agent-model' and body.get('reasoning_effort') == 'minimal':
                       self.send_json(400, {'error': {'message': 'Unsupported reasoning_effort: minimal'}})
                       return
@@ -184,6 +189,7 @@ jobs:
                       message = tool_call('page_unregistered_admin_write', {})
                       finish = 'tool_calls'
                   elif 'ai_echo_test' in names:
+                      time.sleep(1.4)
                       message = tool_call('ai_echo_test', {'value': 'AI_OK'})
                       finish = 'tool_calls'
                   elif 'SLOW_STOP_TEST' in latest_user:
