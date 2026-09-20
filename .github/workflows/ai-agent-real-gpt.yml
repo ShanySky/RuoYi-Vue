@@ -6,7 +6,6 @@ on:
     branches:
       - chatgpt/ai-agent-assistant
       - chatgpt/ai-agent-hardening-b1-b3
-      - chatgpt/ai-agent-regression-stability-closure
     paths:
       - '.github/workflows/ai-agent-real-gpt.yml'
   workflow_dispatch:
