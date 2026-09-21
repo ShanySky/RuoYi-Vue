@@ -41,6 +41,22 @@ class Model(BaseHTTPRequestHandler):
         pass
 
     def send(self, body):
+        if getattr(self, "streaming", False) and "choices" in body:
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.end_headers()
+            choice = body["choices"][0]
+            delta = choice["message"].copy()
+            if "tool_calls" in delta:
+                delta["tool_calls"] = [{**call, "index": index} for index, call in enumerate(delta["tool_calls"])]
+            for frame in (
+                {"choices": [{"index": 0, "delta": delta, "finish_reason": None}]},
+                {"choices": [{"index": 0, "delta": {}, "finish_reason": choice["finish_reason"]}]},
+                {"choices": [], "usage": body["usage"]},
+            ):
+                self.wfile.write(("data: " + json.dumps({"id": body["id"], "model": body["model"], **frame}, ensure_ascii=False) + "\n\n").encode("utf-8"))
+            self.wfile.write(b"data: [DONE]\n\n")
+            return
         raw = json.dumps(body, ensure_ascii=False).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -53,6 +69,7 @@ class Model(BaseHTTPRequestHandler):
 
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        self.streaming = bool(body.get("stream"))
         REQUESTS.append(body)
         with TRACE.open("a", encoding="utf-8") as stream:
             stream.write(json.dumps(body, ensure_ascii=False) + "\n")

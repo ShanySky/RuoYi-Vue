@@ -14,6 +14,8 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.ruoyi.ai.domain.AiPendingToolCall;
 import com.ruoyi.ai.domain.AiRun;
 import com.ruoyi.ai.data.AiDataTools;
+import com.ruoyi.ai.workspace.AiWorkspaceTools;
+import com.ruoyi.ai.workspace.AiWorkspaceService;
 import com.ruoyi.ai.mapper.AiPendingToolCallMapper;
 import com.ruoyi.ai.mapper.AiRunMapper;
 import com.ruoyi.ai.mapper.AiServerCallMapper;
@@ -42,11 +44,14 @@ public class AiServerToolService
     private final com.ruoyi.ai.service.RunLifecycleService lifecycle;
     private final AiDataTools data;
     private final AiBusinessAccess business;
+    private final AiWorkspaceTools workspaceTools;
+    private final AiWorkspaceService workspace;
 
     public AiServerToolService(AiApiAccess access, AiNativeApiInvoker invoker, AiServerCallMapper calls,
             AiPendingToolCallMapper pending, AiRunMapper runs, ObjectMapper json, ApiContractSchema schemas,
             org.springframework.transaction.PlatformTransactionManager transactionManager,
-            com.ruoyi.ai.service.RunLifecycleService lifecycle, AiDataTools data, AiBusinessAccess business)
+            com.ruoyi.ai.service.RunLifecycleService lifecycle, AiDataTools data, AiBusinessAccess business,
+            AiWorkspaceTools workspaceTools, AiWorkspaceService workspace)
     {
         this.access = access;
         this.invoker = invoker;
@@ -59,12 +64,14 @@ public class AiServerToolService
         this.lifecycle = lifecycle;
         this.data = data;
         this.business = business;
+        this.workspaceTools = workspaceTools;
+        this.workspace = workspace;
     }
 
     public boolean supports(String name)
     {
         return SEARCH.equals(name) || DESCRIBE.equals(name) || RESULT.equals(name)
-                || (name != null && name.matches("api_[a-f0-9]{24}")) || data.supports(name);
+                || (name != null && name.matches("api_[a-f0-9]{24}")) || data.supports(name) || AiWorkspaceTools.supports(name);
     }
 
     public List<ApprovedTool> definitions(AiRun run)
@@ -89,6 +96,7 @@ public class AiServerToolService
         ApiContractSchema.add(result, "limit", Map.of("type", "integer", "minimum", 1, "maximum", 50), false);
         definitions.add(tool(RESULT, "读取本任务结果句柄。支持 JSON 路径（例如 /rows）、数组偏移和条数；每次最多 8 KiB。", result));
         definitions.addAll(data.discovery());
+        definitions.addAll(workspaceTools.definitions());
         for (var loaded : calls.loaded(run.getRunId()))
         {
             try
@@ -130,7 +138,12 @@ public class AiServerToolService
         values.put("userId", tool.getUserId());
         values.put("toolName", tool.getToolName());
         values.put("riskLevel", definition.riskLevel());
-        if (tool.getToolName().startsWith("data_"))
+        if (AiWorkspaceTools.supports(tool.getToolName()))
+        {
+            values.put("capabilityId", tool.getToolName());
+            values.put("authorizationHash", business.authorization(tool.getToolName()));
+        }
+        else if (tool.getToolName().startsWith("data_"))
         {
             values.put("capabilityId", tool.getToolName());
             values.put("authorizationHash", data.authorization(tool.getToolName()));
@@ -189,7 +202,8 @@ public class AiServerToolService
                 // 在任何业务内容进入会话前记录来源，使后续历史与检查点也受同一授权约束。
                 calls.addSource(call.conversationId(), call.capabilityId(), call.authorizationHash());
                 JsonNode result;
-                if (call.capabilityId().startsWith("data_")) result = data.execute(call, args);
+                if (AiWorkspaceTools.supports(call.toolName())) result = workspace.execute(call, args);
+                else if (call.capabilityId().startsWith("data_")) result = data.execute(call, args);
                 else
                 {
                     Capability capability = access.require(call.capabilityId());
@@ -197,7 +211,8 @@ public class AiServerToolService
                     result = invoker.invoke(call.callId(), capability, args);
                 }
                 nativeStarted = true;
-                boolean success = !result.has("code") || result.path("code").asInt() == 200;
+                boolean success = result.has("exitCode") ? result.path("exitCode").asInt() == 0
+                        : !result.has("code") || result.path("code").asInt() == 200;
                 if ("WRITE".equals(call.riskLevel()))
                 {
                     knownWriteSuccess = success;
@@ -214,6 +229,12 @@ public class AiServerToolService
                             "AUTHORIZATION_CHANGED_AFTER_EXECUTION");
                     pending.cancelByRun(call.runId(), "CANCELLED");
                     lifecycle.tryFail(call.runId(), "AUTHORIZATION_CHANGED_AFTER_EXECUTION");
+                    return;
+                }
+                if (AiWorkspaceTools.supports(call.toolName()) && bytes(result) <= MAX_DISCLOSURE_BYTES)
+                {
+                    finish(call, success ? "SUCCEEDED" : "FAILED", null, null,
+                            Map.of("success", success, "result", result), success ? null : "WORKSPACE_COMMAND_FAILED");
                     return;
                 }
                 String resultId = UUID.randomUUID().toString().replace("-", "");
@@ -256,7 +277,7 @@ public class AiServerToolService
         if (!call.conversationId().equals(conversationId) || call.toolResultJson() == null
                 || List.of("PENDING", "EXECUTING").contains(call.status()))
             throw new ServiceException("服务端尚未完成该调用，不能提交浏览器结果");
-        if (call.capabilityId() != null && "SUCCEEDED".equals(call.status()))
+        if (call.capabilityId() != null)
         {
             if (!call.authorizationHash().equals(business.authorization(call.capabilityId()))) throw denied();
         }

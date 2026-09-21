@@ -60,6 +60,9 @@ for db in "$FRESH_DB" "$UPGRADE_DB"; do
   test "$(mysql_db "$db" -Nse "select count(*) from ai_server_result_guard where guard_id=1;")" = 1
   test "$(mysql_db "$db" -Nse "select count(*) from ai_api_policy where enabled=1;")" = 0
   test "$(mysql_db "$db" -Nse "select count(*) from ai_data_policy where enabled=1;")" = 0
+  test "$(mysql_db "$db" -Nse "select count(*) from ai_workspace_policy where policy_id=1 and enabled=0;")" = 1
+  test "$(mysql_db "$db" -Nse "select count(*) from ai_artifact;")" = 0
+  test "$(mysql_db "$db" -Nse "select count(*) from sys_menu where perms in ('ai:workspace:view','ai:workspace:edit','ai:workspace:use');")" = 4
   test "$(mysql_db "$db" -Nse "select count(*) from sys_menu where perms in ('ai:data:view','ai:data:edit');")" = 3
   test "$(mysql_db "$db" -Nse "select count(*) from sys_menu where perms in ('ai:api:view','ai:api:edit');")" = 3
   test "$(mysql_db "$db" -Nse "select count(*) from ai_scope_revision where guard_id=1;")" = 1

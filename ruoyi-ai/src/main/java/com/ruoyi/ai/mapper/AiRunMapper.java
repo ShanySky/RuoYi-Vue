@@ -1,6 +1,8 @@
 package com.ruoyi.ai.mapper;
 import java.util.List; import org.apache.ibatis.annotations.*; import com.ruoyi.ai.domain.AiRun;
 public interface AiRunMapper {
+ @Select("select run_id as runId,status from ai_run where status in ('RUNNING','WAITING_TOOL','COMPACTING','CANCEL_REQUESTED')") List<AiRun> selectAllActive();
+ @Select("select timestampdiff(second,create_time,sysdate()) from ai_run where run_id=#{id}") Long ageSeconds(Long id);
  String FIELDS="select run_id as runId,client_run_key as clientRunKey,conversation_id as conversationId,user_id as userId,model_id as modelId,model_code as modelCode,reasoning_effort as reasoningEffort,status,cancel_reason as cancelReason,superseded_by_run_id as supersededByRunId,system_prompt_version as systemPromptVersion,compaction_prompt_version as compactionPromptVersion,input_tokens as inputTokens,cache_read_tokens as cacheReadTokens,cache_write_tokens as cacheWriteTokens,total_tokens as totalTokens,create_time as createTime,update_time as updateTime,end_time as endTime ";
  @Insert("insert into ai_run(client_run_key,conversation_id,user_id,model_id,model_code,reasoning_effort,status,system_prompt_version,compaction_prompt_version,create_time,update_time) values(#{clientRunKey},#{conversationId},#{userId},#{modelId},#{modelCode},#{reasoningEffort},#{status},#{systemPromptVersion},#{compactionPromptVersion},sysdate(),sysdate())") @Options(useGeneratedKeys=true,keyProperty="runId") int insert(AiRun r);
  @Select(FIELDS+"from ai_run where run_id=#{runId}") AiRun selectById(Long runId);

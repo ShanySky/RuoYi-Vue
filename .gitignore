@@ -51,3 +51,8 @@ nbdist/
 
 # 任务验收脚本的解释器缓存
 /scripts/local/__pycache__/
+
+# 执行框架安装依赖和任务工作目录
+/runtime/pi/node_modules/
+/runtime/pi/.runtime/
+/runtime/workspace/__pycache__/

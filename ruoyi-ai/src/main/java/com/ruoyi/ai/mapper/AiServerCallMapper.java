@@ -77,6 +77,9 @@ public interface AiServerCallMapper
             + "where status='EXECUTING' and start_time<date_sub(sysdate(),interval 2 minute)")
     int recoverInterrupted();
 
+    @Update("update ai_server_call set status='UNKNOWN',error_code='PROCESS_INTERRUPTED',end_time=sysdate() where status='EXECUTING'")
+    int interruptAllExecuting();
+
     @Delete("delete l from ai_api_loaded l left join ai_run r on r.run_id=l.run_id "
             + "where r.run_id is null or (r.end_time is not null and r.end_time<date_sub(sysdate(),interval 30 minute))")
     int cleanLoaded();

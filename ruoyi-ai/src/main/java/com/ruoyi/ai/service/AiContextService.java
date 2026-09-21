@@ -19,7 +19,7 @@ public class AiContextService {
   payload.append("需要压缩的后续历史：\n");appendCompactionHistory(payload,segment);
   try{
    AgentRuntimeRequest request=new AgentRuntimeRequest(model.getModelId(),reasoningEffort,"ruoyi:compaction:"+conversation.getConversationId(),
-    List.of(AgentRuntimeMessage.system(prompts.render(cpPrompt,Map.of("conversationId",conversation.getConversationId(),"modelCode",StringUtils.defaultString(model.getModelCode())))),AgentRuntimeMessage.user(payload.toString())),List.of());
+    List.of(AgentRuntimeMessage.system(prompts.render(cpPrompt,Map.of("conversationId",conversation.getConversationId(),"modelCode",StringUtils.defaultString(model.getModelCode())))),AgentRuntimeMessage.user(payload.toString())),List.of(),run.getRunId(),true);
    AgentRuntimeResult response=runs.call(run.getRunId(),()->runtime.call(request));
    runs.recordUsage(run.getRunId(),response.usage());
    if(response==null||StringUtils.isBlank(response.text()))throw new ServiceException("上下文压缩未返回有效 Checkpoint");

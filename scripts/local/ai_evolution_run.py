@@ -54,6 +54,9 @@ def start(kind, baseline, regression=False, regression_db=None):
             "RUOYI_PROFILE": str(folder / "uploads"),
             "SERVER_ADDRESS": "127.0.0.1",
             "SERVER_PORT": str(backend_port),
+            "RUOYI_AI_HARNESS_NODE": "C:/Users/Shane/AppData/Roaming/fnm/node-versions/v22.22.2/installation/node.exe",
+            "RUOYI_AI_HARNESS_HOME": str(BACKEND / "runtime/pi"),
+            "RUOYI_AI_WORKSPACE_TOKEN_FILE": str(EVIDENCE / "workspace-broker.token"),
         })
         logging_path = folder / "logback.xml"
         logging_source = (BACKEND / "ruoyi-admin/src/main/resources/logback.xml").read_text(encoding="utf-8")

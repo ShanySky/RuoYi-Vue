@@ -25,6 +25,8 @@ STAGES = {
     "API-1": ("stage1", LIMITS, 12),
     "DB-2": ("stage2", {"requests": 32, "inputTokens": 180000, "outputTokens": 24000,
         "toolRounds": 24, "retries": 3, "upstreamSeconds": 1200, "wallSeconds": 3600}, 10),
+    "HARNESS-3": ("stage3", {"requests": 64, "inputTokens": 400000, "outputTokens": 60000,
+        "toolRounds": 48, "retries": 3, "upstreamSeconds": 2400, "wallSeconds": 7200}, 16),
 }
 
 
@@ -164,8 +166,9 @@ class Proxy(BaseHTTPRequestHandler):
             self.send(413, {"error": {"message": "单次输入体积超过验收上限"}})
             return
         body = json.loads(self.rfile.read(size)) if size else {}
-        if method == "POST" and (body.get("model") != MODEL or body.get("stream")):
-            self.send(400, {"error": {"message": "只允许已授权模型的非流式验收请求"}})
+        if method == "POST" and (body.get("model") != MODEL
+                or (body.get("stream") and self.budget.state["stage"] != "HARNESS-3")):
+            self.send(400, {"error": {"message": "模型或流式协议不符合该阶段已审核预算"}})
             return
         with LOCK:
             try:
@@ -176,6 +179,9 @@ class Proxy(BaseHTTPRequestHandler):
             with self.budget.trace_path.open("a", encoding="utf-8") as stream:
                 stream.write(json.dumps({"requestId": entry["id"], "body": body}, ensure_ascii=False) + "\n")
         started = time.monotonic()
+        if body.get("stream"):
+            self.forward_stream(entry, path, body, started)
+            return
         status, response = 502, {}
         try:
             upstream = requests.request(method, self.upstream + path,
@@ -197,6 +203,77 @@ class Proxy(BaseHTTPRequestHandler):
                     with self.budget.output_path.open("a", encoding="utf-8") as stream:
                         stream.write(json.dumps({"requestId": entry["id"], "response": response}, ensure_ascii=False) + "\n")
         self.send(status, output)
+
+    def forward_stream(self, entry, path, body, started):
+        # 验收代理有界缓冲一条完整响应后再交给实际 Pi，便于完整计费和拒绝残缺流。
+        # 产品框架仍直接使用原生流式模型接口，没有改写模型/工具循环。
+        status, response, raw = 502, {}, bytearray()
+        try:
+            with requests.post(self.upstream + path, headers={"Authorization": "Bearer " + self.secret,
+                    "Content-Type": "application/json"}, json=body, stream=True, timeout=(10, 110), allow_redirects=False) as upstream:
+                status = upstream.status_code
+                if status != 200:
+                    raise RuntimeError("上游拒绝流式请求")
+                frames, complete = [], False
+                for line in upstream.iter_lines():
+                    if time.monotonic() - started > 120 or len(raw) + len(line) + 2 > 512 * 1024:
+                        raise RuntimeError("流式响应超过验收时间或体积上限")
+                    if line.startswith(b"data:"):
+                        value = line[5:].strip()
+                        if value == b"[DONE]":
+                            raw.extend(b"data: [DONE]\n\n")
+                            complete = True
+                            break
+                        frame = json.loads(value)
+                        if "error" in frame:
+                            raise RuntimeError("上游流式响应失败")
+                        encoded = json.dumps(frame, ensure_ascii=False).replace(self.secret, "[REDACTED]")
+                        frames.append(json.loads(encoded))
+                        raw.extend(("data: " + encoded + "\n\n").encode("utf-8"))
+                if not complete:
+                    raise RuntimeError("上游流式响应未完整结束")
+                response = stream_receipt(frames)
+        except Exception:
+            status = 502
+            raw.clear()
+        finally:
+            with LOCK:
+                self.budget.settle(entry, status, time.monotonic() - started, response)
+                if status == 200:
+                    with self.budget.output_path.open("a", encoding="utf-8") as stream:
+                        stream.write(json.dumps({"requestId": entry["id"], "response": response}, ensure_ascii=False) + "\n")
+        if status != 200:
+            self.send(status, {"error": {"message": "上游流式调用失败；本次已计入预算，不自动重试"}})
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Content-Length", str(len(raw)))
+        self.end_headers()
+        self.wfile.write(raw)
+
+
+def stream_receipt(frames):
+    message, calls, usage = {"role": "assistant", "content": ""}, {}, None
+    for frame in frames:
+        if frame.get("usage"):
+            usage = frame["usage"]
+        for choice in frame.get("choices", []):
+            if choice.get("index", 0) != 0:
+                raise RuntimeError("验收只接受单个模型候选")
+            delta = choice.get("delta", {})
+            message["content"] += delta.get("content") or ""
+            for call in delta.get("tool_calls", []):
+                index = call.get("index", 0)
+                if type(index) is not int or not 0 <= index < 16:
+                    raise RuntimeError("工具分片索引无效")
+                target = calls.setdefault(index, {"id": "", "type": "function", "function": {"name": "", "arguments": ""}})
+                target["id"] += call.get("id") or ""
+                function = call.get("function", {})
+                target["function"]["name"] += function.get("name") or ""
+                target["function"]["arguments"] += function.get("arguments") or ""
+    if calls:
+        message["tool_calls"] = [calls[index] for index in sorted(calls)]
+    return {"choices": [{"message": message}], "usage": usage}
 
 
 def serve():

@@ -7,7 +7,7 @@ import time
 import unittest
 
 from ai_evolution_vm import EVIDENCE
-from ai_model_budget_proxy import Budget
+from ai_model_budget_proxy import Budget, stream_receipt
 
 
 class BudgetTest(unittest.TestCase):
@@ -91,6 +91,22 @@ class BudgetTest(unittest.TestCase):
                 "choices": [{"message": {"tool_calls": [{"id": str(index)}]}}]})
         with self.assertRaises(RuntimeError):
             Budget(budget.path, stage="DB-2").reserve("POST", "/chat/completions", self.request(11))
+
+    def test_streamed_usage_and_tool_fragments_settle_the_same_persistent_ledger(self):
+        budget = Budget(self.folder / "harness.json", stage="HARNESS-3")
+        budget.begin_validation()
+        entry = budget.reserve("POST", "/chat/completions", {**self.request(1), "stream": True})
+        response = stream_receipt([
+            {"choices": [{"index": 0, "delta": {"tool_calls": [{"index": 0, "id": "call", "function": {"name": "workspace_execute", "arguments": '{"command":'}}]}}]},
+            {"choices": [{"index": 0, "delta": {"tool_calls": [{"index": 0, "function": {"arguments": '"true"}'}}]}}]},
+            {"choices": [], "usage": {"prompt_tokens": 20, "completion_tokens": 8}},
+        ])
+        budget.settle(entry, 200, 1, response)
+        self.assertEqual('{"command":"true"}', response["choices"][0]["message"]["tool_calls"][0]["function"]["arguments"])
+        loaded = Budget(budget.path, stage="HARNESS-3")
+        self.assertEqual(20, loaded.state["entries"][0]["inputTokens"])
+        self.assertEqual(1, loaded.state["entries"][0]["toolRounds"])
+        self.assertEqual(1, loaded.state["validationAttempts"])
 
 
 if __name__ == "__main__":

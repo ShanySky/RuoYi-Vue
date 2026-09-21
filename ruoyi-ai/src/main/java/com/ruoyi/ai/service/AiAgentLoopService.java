@@ -163,7 +163,7 @@ public class AiAgentLoopService
         {
             response = runService.call(run.getRunId(), () -> agentRuntime.call(new AgentRuntimeRequest(
                     selection.modelId(), selection.reasoningEffort(), assembled.cacheKey(),
-                    assembled.messages(), assembled.runtimeTools())));
+                    assembled.messages(), assembled.runtimeTools(), run.getRunId(), false)));
         }
         catch (InterruptedException e)
         {
@@ -213,7 +213,7 @@ public class AiAgentLoopService
             return runState(conversation, runService.get(run.getRunId()));
         }
 
-        if (serverTools.supports(prepared.name()) && "READ".equals(prepared.riskLevel()))
+        if (serverTools.supports(prepared.name()) && ("READ".equals(prepared.riskLevel()) || "WORKSPACE".equals(prepared.riskLevel())))
         {
             serverTools.execute(conversation.getConversationId(), prepared.callId(), true);
             if (!"WAITING_TOOL".equals(runService.get(run.getRunId()).getStatus()))

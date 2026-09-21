@@ -1,0 +1,9 @@
+{
+  "name": "ruoyi-ai-harness",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "engines": { "node": ">=22.19.0" },
+  "scripts": { "test": "node --test worker.test.mjs" },
+  "dependencies": { "@earendil-works/pi-coding-agent": "0.85.1" }
+}
