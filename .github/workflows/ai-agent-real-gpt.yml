@@ -83,6 +83,20 @@ jobs:
           java-version: '17'
           cache: maven
 
+      - name: 安装执行框架所需的 Node 22
+        if: steps.real_gpt.outputs.configured == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.22.2'
+
+      - name: 安装锁定的执行框架
+        if: steps.real_gpt.outputs.configured == 'true'
+        working-directory: runtime/pi
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          echo "RUOYI_AI_HARNESS_NODE=$(command -v node)" >> "$GITHUB_ENV"
+          echo "RUOYI_AI_HARNESS_HOME=$GITHUB_WORKSPACE/runtime/pi" >> "$GITHUB_ENV"
+
       - name: Initialize database
         if: steps.real_gpt.outputs.configured == 'true'
         run: |

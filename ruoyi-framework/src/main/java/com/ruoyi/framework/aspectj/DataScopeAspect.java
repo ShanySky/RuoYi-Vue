@@ -66,6 +66,17 @@ public class DataScopeAspect
      */
     public static void dataScopeFilter(JoinPoint joinPoint, SysUser user, String userAlias, String deptAlias, String userField, String deptField, String permission)
     {
+        Object params = joinPoint.getArgs()[0];
+        if (params instanceof BaseEntity)
+        {
+            dataScopeFilter((BaseEntity) params, user, userAlias, deptAlias, userField, deptField, permission);
+        }
+    }
+
+    /** 供受控查询复用同一业务范围算法；参数实体必须由服务端创建。 */
+    public static void dataScopeFilter(BaseEntity baseEntity, SysUser user, String userAlias, String deptAlias,
+            String userField, String deptField, String permission)
+    {
         StringBuilder sqlString = new StringBuilder();
         List<String> conditions = new ArrayList<String>();
         List<String> scopeCustomIds = new ArrayList<String>();
@@ -136,12 +147,7 @@ public class DataScopeAspect
 
         if (StringUtils.isNotBlank(sqlString.toString()))
         {
-            Object params = joinPoint.getArgs()[0];
-            if (StringUtils.isNotNull(params) && params instanceof BaseEntity)
-            {
-                BaseEntity baseEntity = (BaseEntity) params;
-                baseEntity.getParams().put(DATA_SCOPE, " AND (" + sqlString.substring(4) + ")");
-            }
+            baseEntity.getParams().put(DATA_SCOPE, " AND (" + sqlString.substring(4) + ")");
         }
     }
 

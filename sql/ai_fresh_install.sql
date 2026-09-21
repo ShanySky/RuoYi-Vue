@@ -264,3 +264,154 @@ select prompt_type,
        default_content, 'system', coalesce(create_time, sysdate())
 from ai_prompt
 where prompt_type in ('SYSTEM','COMPACTION');
+
+-- 后端接口阶段：与 20260921_01_server_api.sql 保持结构一致。
+create table if not exists ai_api_policy (
+  capability_id varchar(64) not null,
+  contract_hash char(64) not null,
+  enabled tinyint not null default 0,
+  revision bigint not null default 1,
+  update_by varchar(64) not null,
+  update_time datetime not null,
+  primary key (capability_id)
+) engine=innodb comment='AI 接口专属开放策略';
+
+create table if not exists ai_server_call (
+  call_id varchar(64) not null,
+  conversation_id bigint not null,
+  run_id bigint not null,
+  user_id bigint not null,
+  tool_name varchar(128) not null,
+  capability_id varchar(64) default null,
+  authorization_hash char(64) default null,
+  risk_level varchar(32) not null,
+  status varchar(32) not null,
+  dedupe_key char(64) default null,
+  result_id varchar(64) default null,
+  result_json mediumtext default null,
+  tool_result_json mediumtext default null,
+  error_code varchar(64) default null,
+  create_time datetime not null,
+  start_time datetime default null,
+  end_time datetime default null,
+  expire_time datetime not null,
+  primary key (call_id),
+  unique key uk_ai_server_dedupe (dedupe_key),
+  unique key uk_ai_server_result (result_id),
+  key idx_ai_server_conversation (conversation_id, run_id),
+  key idx_ai_server_expiry (user_id, expire_time)
+) engine=innodb comment='AI 服务端调用与有期限结果';
+
+create table if not exists ai_api_loaded (
+  run_id bigint not null,
+  capability_id varchar(64) not null,
+  contract_hash char(64) not null,
+  load_time datetime not null,
+  primary key (run_id, capability_id)
+) engine=innodb comment='AI 按运行加载的接口定义';
+
+create table if not exists ai_server_result_guard (
+  guard_id tinyint not null,
+  primary key (guard_id)
+) engine=innodb comment='AI 结果配额事务锁';
+insert ignore into ai_server_result_guard values(1);
+
+create table if not exists ai_business_source (
+  conversation_id bigint not null,
+  capability_id varchar(64) not null,
+  authorization_hash char(64) not null,
+  primary key (conversation_id, capability_id, authorization_hash)
+) engine=innodb comment='AI 历史及派生成果的业务授权来源';
+
+insert ignore into sys_menu values(125,'后端接口',2000,7,'apis','ai/apis/index','','',1,0,'C','0','0','ai:api:view','tree-table','admin',sysdate(),'',null,'从真实接口发现并逐项治理');
+insert ignore into sys_menu values(2110,'后端接口查看',125,1,'#','','','',1,0,'F','0','0','ai:api:view','#','admin',sysdate(),'',null,'');
+insert ignore into sys_menu values(2111,'后端接口开放',125,2,'#','','','',1,0,'F','0','0','ai:api:edit','#','admin',sysdate(),'',null,'');
+
+-- 当前若依行范围依赖的归属事实发生变化时，使旧 AI 结果失效。
+create table if not exists ai_scope_revision (
+  guard_id tinyint not null primary key,
+  revision bigint not null default 0
+) engine=innodb comment='数据归属变化版本';
+insert ignore into ai_scope_revision values(1,0);
+create table if not exists ai_scope_trigger_manifest (
+  trigger_name varchar(64) not null primary key,
+  table_name varchar(64) not null,
+  event_name varchar(16) not null,
+  action_hash char(64) not null
+) engine=innodb comment='归属触发器安装完整性记录';
+-- 安装期间关闭披露；完成后提升版本，作废保护缺失期间可能过时的结果。
+delete from ai_scope_trigger_manifest;
+
+drop trigger if exists ai_scope_user_update;
+create trigger ai_scope_user_update after update on sys_user for each row
+  update ai_scope_revision set revision=revision+1 where guard_id=1
+    and (not(old.dept_id <=> new.dept_id) or not(old.del_flag <=> new.del_flag));
+drop trigger if exists ai_scope_user_delete;
+create trigger ai_scope_user_delete after delete on sys_user for each row
+  update ai_scope_revision set revision=revision+1 where guard_id=1;
+drop trigger if exists ai_scope_dept_update;
+create trigger ai_scope_dept_update after update on sys_dept for each row
+  update ai_scope_revision set revision=revision+1 where guard_id=1
+    and (not(old.parent_id <=> new.parent_id) or not(old.ancestors <=> new.ancestors)
+      or not(old.del_flag <=> new.del_flag));
+drop trigger if exists ai_scope_dept_delete;
+create trigger ai_scope_dept_delete after delete on sys_dept for each row
+  update ai_scope_revision set revision=revision+1 where guard_id=1;
+drop trigger if exists ai_scope_user_role_delete;
+create trigger ai_scope_user_role_delete after delete on sys_user_role for each row
+  update ai_scope_revision set revision=revision+1 where guard_id=1;
+drop trigger if exists ai_scope_user_role_update;
+create trigger ai_scope_user_role_update after update on sys_user_role for each row
+  update ai_scope_revision set revision=revision+1 where guard_id=1
+    and (not(old.user_id <=> new.user_id) or not(old.role_id <=> new.role_id));
+
+update ai_scope_revision set revision=revision+1 where guard_id=1;
+insert into ai_scope_trigger_manifest(trigger_name,table_name,event_name,action_hash)
+select trigger_name,event_object_table,event_manipulation,sha2(action_statement,256)
+from information_schema.triggers where trigger_schema=database()
+  and trigger_name in ('ai_scope_user_update','ai_scope_user_delete','ai_scope_dept_update',
+    'ai_scope_dept_delete','ai_scope_user_role_delete','ai_scope_user_role_update')
+on duplicate key update table_name=values(table_name),event_name=values(event_name),action_hash=values(action_hash);
+
+-- 受控数据库查询策略，默认不开放任何库或表。
+create table if not exists ai_data_policy (
+  scope_key varchar(64) not null primary key,
+  contract_hash char(64) not null,
+  enabled tinyint not null default 0,
+  fields_json text not null,
+  operations_json varchar(128) not null,
+  revision bigint not null default 1,
+  update_by varchar(64) not null,
+  update_time datetime not null
+) engine=innodb comment='AI 数据库及表字段操作开放策略';
+insert ignore into sys_menu values(126,'数据查询',2000,8,'data','ai/data/index','','',1,0,'C','0','0','ai:data:view','table','admin',sysdate(),'',null,'在原业务授权内治理查询分析');
+insert ignore into sys_menu values(2112,'数据查询治理查看',126,1,'#','','','',1,0,'F','0','0','ai:data:view','#','admin',sysdate(),'',null,'');
+insert ignore into sys_menu values(2113,'数据查询治理修改',126,2,'#','','','',1,0,'F','0','0','ai:data:edit','#','admin',sysdate(),'',null,'');
+
+-- 隔离工作空间与私有成果，默认关闭。
+create table if not exists ai_workspace_policy (
+  policy_id tinyint not null primary key,
+  enabled tinyint not null default 0,
+  revision bigint not null default 1,
+  update_by varchar(64) not null,
+  update_time datetime not null
+) engine=innodb comment='AI 隔离工作空间开放策略';
+insert ignore into ai_workspace_policy values(1,0,1,'admin',sysdate());
+
+create table if not exists ai_artifact (
+  artifact_id char(32) not null primary key,
+  user_id bigint not null,
+  conversation_id bigint not null,
+  run_id bigint not null,
+  file_name varchar(100) not null,
+  file_bytes bigint not null,
+  sha256 char(64) not null,
+  expire_time bigint not null comment '到期时刻，UTC 毫秒',
+  create_time datetime not null,
+  key idx_ai_artifact_conversation(conversation_id),
+  key idx_ai_artifact_expire(expire_time)
+) engine=innodb comment='AI 私有交付成果归属与保留期';
+insert ignore into sys_menu values(127,'工作空间',2000,9,'workspace','ai/workspace/index','','',1,0,'C','0','0','ai:workspace:view','server','admin',sysdate(),'',null,'隔离命令与成果空间治理');
+insert ignore into sys_menu values(2114,'工作空间治理查看',127,1,'#','','','',1,0,'F','0','0','ai:workspace:view','#','admin',sysdate(),'',null,'');
+insert ignore into sys_menu values(2115,'工作空间治理修改',127,2,'#','','','',1,0,'F','0','0','ai:workspace:edit','#','admin',sysdate(),'',null,'');
+insert ignore into sys_menu values(2116,'工作空间使用',127,3,'#','','','',1,0,'F','0','0','ai:workspace:use','#','admin',sysdate(),'',null,'使用权限不包含治理权限');

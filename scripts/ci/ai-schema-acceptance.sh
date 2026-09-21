@@ -7,12 +7,17 @@ DB_PASSWORD="${AI_CI_DB_PASSWORD:-password}"
 FRESH_DB="${AI_CI_FRESH_DB:-ry_ai_fresh_acceptance}"
 UPGRADE_DB="${AI_CI_UPGRADE_DB:-ry_ai_upgrade_acceptance}"
 
+# 删除只允许落在明确命名的验收库，防止环境变量误指业务库。
+[[ "$FRESH_DB" =~ ^ry_ai_[A-Za-z0-9_]*acceptance$ ]]
+[[ "$UPGRADE_DB" =~ ^ry_ai_[A-Za-z0-9_]*acceptance$ ]]
+[[ "$FRESH_DB" != "$UPGRADE_DB" ]]
+
 mysql_server() {
-  mysql -h"$DB_HOST" -u"$DB_USER" -p"$DB_PASSWORD" "$@"
+  MYSQL_PWD="$DB_PASSWORD" mysql -h"$DB_HOST" -u"$DB_USER" "$@"
 }
 mysql_db() {
   local db="$1"; shift
-  mysql -h"$DB_HOST" -u"$DB_USER" -p"$DB_PASSWORD" "$db" "$@"
+  MYSQL_PWD="$DB_PASSWORD" mysql -h"$DB_HOST" -u"$DB_USER" "$db" "$@"
 }
 cleanup() {
   mysql_server -e "drop database if exists \`$FRESH_DB\`; drop database if exists \`$UPGRADE_DB\`;" >/dev/null
@@ -38,8 +43,12 @@ values('legacy-pending',9001,1,'page_system_user_search','{}','READ',1,'legacy-m
 insert into ai_pending_tool_call(call_id,conversation_id,user_id,tool_name,arguments_json,risk_level,model_id,model_code,run_id,route,page_instance_id,page_version,status,create_time,expire_time,resolved_time)
 values('legacy-resolved',9002,1,'page_system_user_search','{}','READ',1,'legacy-model',9002,'/system/user','legacy:two',1,'RESOLVED',sysdate(),date_add(sysdate(),interval 10 minute),sysdate());
 "
-mysql_db "$UPGRADE_DB" < sql/ai_migrations/20260920_01_phase35_p0_protocol.sql
-mysql_db "$UPGRADE_DB" < sql/ai_migrations/20260920_01_phase35_p0_protocol.sql
+# 全部有序升级执行两次，覆盖新接口表并证明可重入。
+for pass in 1 2; do
+  for migration in sql/ai_migrations/*.sql; do
+    mysql_db "$UPGRADE_DB" < "$migration"
+  done
+done
 
 for db in "$FRESH_DB" "$UPGRADE_DB"; do
   test "$(mysql_server -Nse "select count(*) from information_schema.tables where table_schema='$db' and left(table_name,3)='ai_';")" -ge 11
@@ -48,6 +57,22 @@ for db in "$FRESH_DB" "$UPGRADE_DB"; do
   test "$(mysql_db "$db" -Nse "select count(*) from ai_prompt where prompt_type in ('SYSTEM','COMPACTION') and enabled='0';")" = 2
   test "$(mysql_db "$db" -Nse "select count(*) from ai_prompt_version where prompt_type in ('SYSTEM','COMPACTION');")" -ge 2
   test "$(mysql_db "$db" -Nse "select count(*) from ai_page_config where route='/system/user' and enabled='0';")" = 1
+  test "$(mysql_db "$db" -Nse "select count(*) from ai_server_result_guard where guard_id=1;")" = 1
+  test "$(mysql_db "$db" -Nse "select count(*) from ai_api_policy where enabled=1;")" = 0
+  test "$(mysql_db "$db" -Nse "select count(*) from ai_data_policy where enabled=1;")" = 0
+  test "$(mysql_db "$db" -Nse "select count(*) from ai_workspace_policy where policy_id=1 and enabled=0;")" = 1
+  test "$(mysql_db "$db" -Nse "select count(*) from ai_artifact;")" = 0
+  test "$(mysql_db "$db" -Nse "select count(*) from sys_menu where perms in ('ai:workspace:view','ai:workspace:edit','ai:workspace:use');")" = 4
+  test "$(mysql_db "$db" -Nse "select count(*) from sys_menu where perms in ('ai:data:view','ai:data:edit');")" = 3
+  test "$(mysql_db "$db" -Nse "select count(*) from sys_menu where perms in ('ai:api:view','ai:api:edit');")" = 3
+  test "$(mysql_db "$db" -Nse "select count(*) from ai_scope_revision where guard_id=1;")" = 1
+  test "$(mysql_db "$db" -Nse "select count(*) from ai_scope_trigger_manifest m join information_schema.triggers t on t.trigger_schema=database() and t.trigger_name=m.trigger_name and t.event_object_table=m.table_name and t.event_manipulation=m.event_name and t.action_timing='AFTER' and sha2(t.action_statement,256)=m.action_hash;")" = 6
+  # 归属版本随原事务回滚，提交后才使旧授权失效。
+  before_scope=$(mysql_db "$db" -Nse "select revision from ai_scope_revision where guard_id=1;")
+  mysql_db "$db" -e "start transaction; update sys_user set dept_id=104 where user_id=2; rollback;"
+  test "$(mysql_db "$db" -Nse "select revision from ai_scope_revision where guard_id=1;")" = "$before_scope"
+  mysql_db "$db" -e "update sys_user set dept_id=104 where user_id=2;"
+  test "$(mysql_db "$db" -Nse "select revision from ai_scope_revision where guard_id=1;")" -gt "$before_scope"
 done
 
 test "$(mysql_db "$UPGRADE_DB" -Nse "select status from ai_pending_tool_call where call_id='legacy-pending';")" = "EXPIRED"

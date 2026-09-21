@@ -1,0 +1,23 @@
+[Unit]
+Description=RuoYi AI 受控工作空间
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/ruoyi/runtime/workspace
+ExecStart=/usr/bin/python3 /opt/ruoyi/runtime/workspace/broker.py --root /var/lib/ruoyi-ai-workspace --image ruoyi-ai-workspace:20260921 --token-file /etc/ruoyi/workspace.token
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
+MemoryMax=512M
+CPUQuota=100%
+TasksMax=96
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/ruoyi-ai-workspace
+StandardOutput=null
+
+[Install]
+WantedBy=multi-user.target

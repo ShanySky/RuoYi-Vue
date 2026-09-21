@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ruoyi.ai.domain.AiConversation;
@@ -19,6 +20,7 @@ import com.ruoyi.ai.mapper.AiMessageMapper;
 import com.ruoyi.ai.mapper.AiPendingToolCallMapper;
 import com.ruoyi.ai.protocol.AiCapabilityProtocolValidator;
 import com.ruoyi.ai.runtime.AgentRuntimeResult;
+import com.ruoyi.ai.server.AiServerToolService;
 import com.ruoyi.ai.tool.AiFrontendToolPolicy;
 import com.ruoyi.ai.tool.AiFrontendToolPolicy.ApprovedTool;
 import com.ruoyi.ai.tool.ToolPolicyDefinition;
@@ -39,11 +41,12 @@ public class AiToolCallCoordinator
     private final AiPageConfigService pageConfigService;
     private final AiCapabilityProtocolValidator protocolValidator;
     private final ObjectMapper objectMapper;
+    private final AiServerToolService serverTools;
 
     public AiToolCallCoordinator(AiPendingToolCallMapper pendingMapper, AiMessageMapper messageMapper,
             AiMessageService messageService, AiFrontendToolPolicy toolPolicy, AiRunService runService,
             AiPageConfigService pageConfigService, AiCapabilityProtocolValidator protocolValidator,
-            ObjectMapper objectMapper)
+            ObjectMapper objectMapper, AiServerToolService serverTools)
     {
         this.pendingMapper = pendingMapper;
         this.messageMapper = messageMapper;
@@ -53,6 +56,7 @@ public class AiToolCallCoordinator
         this.pageConfigService = pageConfigService;
         this.protocolValidator = protocolValidator;
         this.objectMapper = objectMapper;
+        this.serverTools = serverTools;
     }
 
     public void validateRequest(AiChatTurnRequest request)
@@ -71,11 +75,20 @@ public class AiToolCallCoordinator
         return toolPolicy.approve(offered);
     }
 
+    public List<ApprovedTool> approveTools(AiChatTurnRequest request, AiRun run)
+    {
+        List<ApprovedTool> approved = new ArrayList<>(approveTools(request));
+        approved.addAll(serverTools.definitions(run));
+        return approved;
+    }
+
+    @Transactional
     public PreparedToolCall prepareToolCall(AiConversation conversation, AiChatTurnRequest request,
             AiRun run, Long modelId, String modelCode, String reasoningEffort,
             List<ApprovedTool> approvedTools, AgentRuntimeResult output)
     {
-        if (output.toolCalls().size() != 1)
+        if (output.toolCalls().size() != 1
+                && output.toolCalls().stream().anyMatch(call -> !serverTools.supports(call.name())))
         {
             throw new ServiceException("当前不支持一次返回多个页面工具调用");
         }
@@ -85,6 +98,11 @@ public class AiToolCallCoordinator
         }
 
         AgentRuntimeResult.ToolCall modelCall = output.toolCalls().get(0);
+        if (serverTools.supports(modelCall.name())
+                && (modelCall.arguments() == null || modelCall.arguments().length() > 20000))
+        {
+            throw new ServiceException("服务端工具参数为空或超过长度上限");
+        }
         ApprovedTool approved = approvedTools.stream().filter(t -> t.name().equals(modelCall.name())).findFirst()
                 .orElseThrow(() -> new ServiceException("模型请求了当前页面不可用的工具：" + modelCall.name()));
         if (isNavigationTool(modelCall.name()))
@@ -93,8 +111,11 @@ public class AiToolCallCoordinator
         }
 
         String runtimeCallId = "rtc_" + UUID.randomUUID().toString().replace("-", "");
+        String callText = output.toolCalls().size() > 1
+                ? "本轮仅受理首个服务端动作，其他请求尚未执行；须根据首个结果重新决定后续动作。"
+                : output.text();
         AiMessage toolCallMessage = buildMessage(conversation.getConversationId(), run.getRunId(), "ASSISTANT",
-                trimTo(output.text(), 12000), runtimeCallId, modelCall.name(), trimTo(modelCall.arguments(), 20000),
+                trimTo(callText, 12000), runtimeCallId, modelCall.name(), trimTo(modelCall.arguments(), 20000),
                 modelId, modelCode, reasoningEffort);
 
         AiPendingToolCall pending = new AiPendingToolCall();
@@ -120,6 +141,7 @@ public class AiToolCallCoordinator
             {
                 return null;
             }
+            if (serverTools.supports(modelCall.name())) serverTools.prepare(pending);
         }
         catch (Exception e)
         {
@@ -146,6 +168,17 @@ public class AiToolCallCoordinator
         if (!"WAITING_TOOL".equals(run.getStatus()))
         {
             throw new ServiceException("当前 Run 已停止或被新指令替代");
+        }
+
+        if (serverTools.supports(pending.getToolName()))
+        {
+            String trusted = toJson(serverTools.trustedResult(conversation.getConversationId(), result.getCallId()));
+            AiMessage message = buildMessage(conversation.getConversationId(), pending.getRunId(), "TOOL",
+                    trusted, pending.getCallId(), pending.getToolName(), null,
+                    pending.getModelId(), pending.getModelCode(), pending.getReasoningEffort());
+            if (!messageService.resolveToolResult(message, pending.getPendingId()))
+                throw new ServiceException("当前运行已停止或工具结果已提交");
+            return pending;
         }
 
         boolean navigation = isNavigationTool(pending.getToolName());

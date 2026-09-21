@@ -42,6 +42,12 @@ public class AiConversationController
         return AjaxResult.success(service.detail(id));
     }
 
+    @GetMapping("/{id}/run-state")
+    public AjaxResult runState(@PathVariable Long id)
+    {
+        return AjaxResult.success(service.runState(id));
+    }
+
     @PutMapping("/{id}/title")
     public AjaxResult rename(@PathVariable Long id, @RequestBody Map<String, String> body)
     {

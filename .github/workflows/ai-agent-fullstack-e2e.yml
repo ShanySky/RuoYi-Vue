@@ -1,7 +1,7 @@
 name: AI Agent Fullstack E2E
 
-# Closed-loop acceptance resolves the paired frontend ref from the backend ref at checkout.
-# /tmp/acceptance-revisions.txt is the authoritative branch/SHA evidence for each run.
+# 配对分支只在同一处解析，检出和验收版本记录使用同一个结果。
+# /tmp/acceptance-revisions.txt 保留本次实际分支与提交证据。
 
 on:
   push:
@@ -9,9 +9,11 @@ on:
       - chatgpt/ai-agent-assistant
       - chatgpt/ai-agent-hardening-phase35-p0
       - chatgpt/ai-agent-phase35-p1-closure
+      - codex/ai-server-capability-evolution-impl
     paths:
       - '.github/workflows/ai-agent-fullstack-e2e.yml'
       - 'ruoyi-ai/**'
+      - 'runtime/**'
       - 'sql/ai_fresh_install.sql'
       - 'sql/ai_migrations/**'
       - 'scripts/ci/**'
@@ -21,6 +23,8 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    env:
+      FRONTEND_REF: ${{ github.ref_name == 'codex/ai-server-capability-evolution-impl' && 'codex/ai-server-capability-evolution-impl' || github.ref_name == 'chatgpt/ai-agent-hardening-phase35-p0' && 'chatgpt/ai-agent-hardening-phase35-p0' || github.ref_name == 'chatgpt/ai-agent-phase35-p1-closure' && 'chatgpt/ai-agent-phase35-p1-closure' || github.ref_name == 'chatgpt/ai-agent-regression-stability-closure' && 'chatgpt/ai-agent-regression-stability-closure' || 'chatgpt/ai-agent-assistant' }}
 
     services:
       mysql:
@@ -57,14 +61,14 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ShanySky/RuoYi-Vue3
-          ref: ${{ github.ref_name == 'chatgpt/ai-agent-hardening-phase35-p0' && 'chatgpt/ai-agent-hardening-phase35-p0' || github.ref_name == 'chatgpt/ai-agent-phase35-p1-closure' && 'chatgpt/ai-agent-phase35-p1-closure' || 'chatgpt/ai-agent-assistant' }}
+          ref: ${{ env.FRONTEND_REF }}
           path: frontend
 
       - name: Record acceptance revisions
         run: |
           {
             echo "BACKEND_REF=${{ github.ref_name }}"
-            echo "FRONTEND_REF=${{ github.ref_name == 'chatgpt/ai-agent-hardening-phase35-p0' && 'chatgpt/ai-agent-hardening-phase35-p0' || github.ref_name == 'chatgpt/ai-agent-phase35-p1-closure' && 'chatgpt/ai-agent-phase35-p1-closure' || github.ref_name == 'chatgpt/ai-agent-regression-stability-closure' && 'chatgpt/ai-agent-regression-stability-closure' || 'chatgpt/ai-agent-assistant' }}"
+            echo "FRONTEND_REF=$FRONTEND_REF"
             echo "BACKEND_SHA=$(git -C backend rev-parse HEAD)"
             echo "FRONTEND_SHA=$(git -C frontend rev-parse HEAD)"
           } | tee /tmp/acceptance-revisions.txt
@@ -81,6 +85,19 @@ jobs:
           java-version: '17'
           cache: maven
           cache-dependency-path: backend/pom.xml
+
+      - name: 安装执行框架所需的 Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.22.2'
+
+      - name: 安装锁定的执行框架并记录独立运行路径
+        working-directory: backend/runtime/pi
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm test
+          echo "RUOYI_AI_HARNESS_NODE=$(command -v node)" >> "$GITHUB_ENV"
+          echo "RUOYI_AI_HARNESS_HOME=$GITHUB_WORKSPACE/backend/runtime/pi" >> "$GITHUB_ENV"
 
       - name: Set up Node 20
         uses: actions/setup-node@v4
@@ -122,6 +139,22 @@ jobs:
                   print(fmt % args, flush=True)
 
               def send_json(self, status, obj):
+                  if status == 200 and getattr(self, 'streaming', False) and 'choices' in obj:
+                      self.send_response(200)
+                      self.send_header('Content-Type', 'text/event-stream')
+                      self.end_headers()
+                      choice = obj['choices'][0]
+                      delta = choice['message'].copy()
+                      if 'tool_calls' in delta:
+                          delta['tool_calls'] = [{**call, 'index': index} for index, call in enumerate(delta['tool_calls'])]
+                      for frame in (
+                          {'choices': [{'index': 0, 'delta': delta, 'finish_reason': None}]},
+                          {'choices': [{'index': 0, 'delta': {}, 'finish_reason': choice['finish_reason']}]},
+                          {'choices': [], 'usage': obj['usage']},
+                      ):
+                          self.wfile.write(('data: ' + json.dumps({'id': obj['id'], 'model': obj['model'], **frame}, ensure_ascii=False) + '\n\n').encode())
+                      self.wfile.write(b'data: [DONE]\n\n')
+                      return
                   payload = json.dumps(obj, ensure_ascii=False).encode()
                   self.send_response(status)
                   self.send_header('Content-Type', 'application/json')
@@ -154,6 +187,7 @@ jobs:
               def do_POST(self):
                   length = int(self.headers.get('Content-Length', '0'))
                   body = json.loads(self.rfile.read(length) or b'{}')
+                  self.streaming = bool(body.get('stream'))
                   if self.path != '/v1/chat/completions':
                       self.send_json(404, {'error': 'not found'})
                       return
@@ -177,7 +211,8 @@ jobs:
                   if 'H_COMPACTION_PROMPT_MARKER' in system_text:
                       message = {'role': 'assistant', 'content': 'H_COMPACTION_APPLIED'}
                   elif latest_user.startswith('需要压缩的后续历史：'):
-                      time.sleep(1.2)
+                      # 给真实浏览器刷新、重新鉴权和取消请求留出明确的在途窗口。
+                      time.sleep(6)
                       message = {
                           'role': 'assistant',
                           'content': 'DEFAULT_COMPACTION_APPLIED\n## 任务主线\n- 当前主题：UI_COMPACTION\n- 最终目标：压缩后继续当前任务\n## 待办与下一步\n- 下一步：继续最新用户指令'
