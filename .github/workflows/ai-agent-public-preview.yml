@@ -10,6 +10,10 @@ on:
       - '.github/workflows/ai-agent-public-preview.yml'
   workflow_dispatch:
 
+# This preview only reads source code; it never pushes changes from the runner.
+permissions:
+  contents: read
+
 jobs:
   preview:
     runs-on: ubuntu-latest
@@ -45,6 +49,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: backend
+          persist-credentials: false
 
       - name: Checkout Vue3 frontend
         uses: actions/checkout@v4
@@ -52,6 +57,7 @@ jobs:
           repository: ShanySky/RuoYi-Vue3
           ref: chatgpt/ai-agent-assistant
           path: frontend
+          persist-credentials: false
 
       - name: Record preview revisions
         run: |
